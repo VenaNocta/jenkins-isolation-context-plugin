@@ -5,15 +5,9 @@
 ### Setup
 
 ```bash
-# required capability changes
-# useless since sudo is used?
-sudo setcap cap_sys_admin+ep /usr/bin/unshare
-```
-
-```bash
 cat /etc/sudoers.d/jenkins-isolation-context 
-jenkins ALL=(root) NOPASSWD: \
-  /usr/bin/bash -c -- *, \
+%ci_wheel ALL=(root) NOPASSWD: \
+  /usr/bin/bash *, \
   /usr/bin/python3 *, \
   /usr/bin/kill -KILL *, \
   /usr/bin/nsenter --target=* --mount --uts --ipc --net --pid -- *, \
@@ -30,5 +24,5 @@ jenkins ALL=(root) NOPASSWD: \
 
 ### Known Issues
 
-+ if a run is currently blocked (no executors available) and starts later the correct isolationCtx does not get injected
++ **[FIXED]** if a run is currently blocked (no executors available) and starts later the correct isolationCtx does not get injected
 
