@@ -21,29 +21,21 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>org.jenkins-ci.plugins.artifact-signing</groupId>
-		<artifactId>artifact-signing-parent</artifactId>
-		<version>1.0.0</version>
+		<groupId>org.jenkins-ci.plugins</groupId>
+		<artifactId>plugin</artifactId>
+		<version>6.2152.ve00a_731c3ce9</version>
 	</parent>
 
-	<groupId>org.jenkins-ci.plugins.context</groupId>
+	<groupId>org.jenkins-ci.plugins</groupId>
 	<artifactId>isolation-context-plugin</artifactId>
-	<version>1.0.0</version>
+	<version>${revision}-v${changelist}</version>
 	<packaging>hpi</packaging>
 
 	<name>Jenkins Isolation-Context Plugin</name>
 	<description>Provides per Run Context Isolation thereby Air-Gapping the
 		execution context</description>
-	<url>https://github.com/RunedUniverse/jenkins-artifact-signing-plugin</url>
+	<url>https://github.com/RunedUniverse/jenkins-isolation-context-plugin</url>
 	<inceptionYear>2026</inceptionYear>
-
-	<properties>
-		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<root-dir>..</root-dir>
-		<hpi.bundledArtifacts>utils-net,utils-net-api</hpi.bundledArtifacts>
-		<!-- VERSIONS -->
-		<sbom>0</sbom>
-	</properties>
 
 	<licenses>
 		<license>
@@ -51,11 +43,6 @@
 			<url>https://www.apache.org/licenses/LICENSE-2.0</url>
 		</license>
 	</licenses>
-
-	<organization>
-		<name>RunedUniverse</name>
-		<url>https://www.runeduniverse.net</url>
-	</organization>
 
 	<developers>
 		<developer>
@@ -73,17 +60,60 @@
 	</developers>
 
 	<scm>
-		<url>https://github.com/RunedUniverse/jenkins-artifact-signing-plugin</url>
+		<url>https://github.com/RunedUniverse/jenkins-isolation-context-plugin</url>
 		<connection>
-			scm:git:https://github.com/RunedUniverse/jenkins-artifact-signing-plugin.git</connection>
+			scm:git:https://github.com/RunedUniverse/jenkins-isolation-context-plugin.git</connection>
 		<developerConnection>
-			scm:git:git@github.com:RunedUniverse/jenkins-artifact-signing-plugin.git</developerConnection>
+			scm:git:git@github.com:RunedUniverse/jenkins-isolation-context-plugin.git</developerConnection>
 	</scm>
 	<issueManagement>
 		<system>GitHub Issues</system>
 		<url>
-			https://github.com/RunedUniverse/jenkins-artifact-signing-plugin/issues</url>
+			https://github.com/RunedUniverse/jenkins-isolation-context-plugin/issues</url>
 	</issueManagement>
+
+	<repositories>
+		<repository>
+			<id>repo.jenkins-ci.org</id>
+			<url>https://repo.jenkins-ci.org/public/</url>
+		</repository>
+		<repository>
+			<id>runeduniverse-releases</id>
+			<url>https://nexus.runeduniverse.net/repository/maven-releases/</url>
+		</repository>
+	</repositories>
+
+	<pluginRepositories>
+		<pluginRepository>
+			<id>repo.jenkins-ci.org</id>
+			<url>https://repo.jenkins-ci.org/public/</url>
+		</pluginRepository>
+	</pluginRepositories>
+
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<root-dir>${basedir}</root-dir>
+		<hpi.bundledArtifacts>utils-net,utils-net-api</hpi.bundledArtifacts>
+		<!-- VERSIONS -->
+		<revision>1.0</revision>
+		<changelist>0</changelist>
+		<!-- ARTIFACT VERSIONS - BOMs -->
+		<jenkins-tools-bom-version>2.555.x</jenkins-tools-bom-version>
+		<jenkins-tools-bom-patch>6269.v7a_159d68a_366</jenkins-tools-bom-patch>
+		<runeduniverse-utils-bom-version>2.0.1</runeduniverse-utils-bom-version>
+		<!-- ARTIFACT VERSIONS -->
+		<jenkins.version>2.541.1</jenkins.version>
+		<!-- ARTIFACT VERSIONS - COMPILER -->
+		<openjdk-min-version>${maven.compiler.release}</openjdk-min-version>
+		<plugin-revelc-formatter-version>2.23.0</plugin-revelc-formatter-version>
+		<plugin-maven-toolchains-version>3.1.0</plugin-maven-toolchains-version>
+		<plugin-mycila-license-version>5.1.2</plugin-mycila-license-version>
+		<maven-jenkins-workflow-version>1.0.0</maven-jenkins-workflow-version>
+		<!-- ARTIFACT VERSIONS - TEST -->
+		<!--
+		<jenkins-test-harness.version>2519.v4ee63f85da_71</jenkins-test-harness.version>
+		-->
+	</properties>
 
 	<dependencies>
 		<dependency>
@@ -145,21 +175,318 @@
 
 	<dependencyManagement>
 		<dependencies>
+			<!-- Jenkins -->
 			<dependency>
-				<groupId>org.jenkins-ci.plugins.artifact-signing</groupId>
-				<artifactId>artifact-signing-sbom</artifactId>
-				<version>${major-version}.${minor-version}.${sbom}</version>
+				<!-- Pick up common dependencies for the selected LTS line: -->
+				<!-- https://github.com/jenkinsci/bom#usage -->
+				<groupId>io.jenkins.tools.bom</groupId>
+				<artifactId>bom-${jenkins-tools-bom-version}</artifactId>
+				<version>${jenkins-tools-bom-patch}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+
+			<!-- UTILS -->
+			<dependency>
+				<groupId>net.runeduniverse.lib.utils</groupId>
+				<artifactId>utils-bom</artifactId>
+				<version>${runeduniverse-utils-bom-version}</version>
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
 
+	<profiles>
+		<!-- TOOLCHAINS -->
+		<profile>
+			<id>toolchain-openjdk-min</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-toolchains-plugin</artifactId>
+						<configuration>
+							<toolchains>
+								<jdk>
+									<version>openjdk-${openjdk-min-version}</version>
+								</jdk>
+							</toolchains>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+		<!-- DEV-INSTALL -->
+		<profile>
+			<id>dev-install</id>
+			<repositories>
+				<repository>
+					<id>runeduniverse-releases</id>
+					<url>
+						https://nexus.runeduniverse.net/repository/maven-releases/
+					</url>
+				</repository>
+				<repository>
+					<id>runeduniverse-development</id>
+					<url>
+						https://nexus.runeduniverse.net/repository/maven-development/
+					</url>
+				</repository>
+				<repository>
+					<id>repo.jenkins-ci.org</id>
+					<url>https://repo.jenkins-ci.org/public/</url>
+				</repository>
+			</repositories>
+			<pluginRepositories>
+				<pluginRepository>
+					<id>repo.jenkins-ci.org</id>
+					<url>https://repo.jenkins-ci.org/public/</url>
+				</pluginRepository>
+				<pluginRepository>
+					<id>runeduniverse-development</id>
+					<url>
+						https://nexus.runeduniverse.net/repository/maven-development/
+					</url>
+				</pluginRepository>
+			</pluginRepositories>
+			<build>
+				<defaultGoal>clean dev/install</defaultGoal>
+				<pluginManagement>
+					<plugins>
+						<plugin>
+							<groupId>org.apache.maven.plugins</groupId>
+							<artifactId>maven-toolchains-plugin</artifactId>
+							<configuration>
+								<toolchains>
+									<jdk>
+										<version>openjdk-${openjdk-min-version}</version>
+									</jdk>
+								</toolchains>
+							</configuration>
+						</plugin>
+					</plugins>
+				</pluginManagement>
+			</build>
+		</profile>
+		<profile>
+			<id>format</id>
+			<build>
+				<defaultGoal>format/validate</defaultGoal>
+			</build>
+		</profile>
+		<!-- PIPELINE -->
+		<profile>
+			<id>install</id>
+			<build>
+				<defaultGoal>
+					clean install
+				</defaultGoal>
+			</build>
+		</profile>
+		<profile>
+			<id>test-junit-jupiter</id>
+			<build>
+				<defaultGoal>junit-jupiter/test</defaultGoal>
+			</build>
+		</profile>
+		<!-- REPOSITORIES -->
+		<profile>
+			<id>repo-releases</id>
+			<repositories>
+				<repository>
+					<id>runeduniverse-releases</id>
+					<url>
+						https://nexus.runeduniverse.net/repository/maven-releases/
+					</url>
+				</repository>
+				<repository>
+					<id>repo.jenkins-ci.org</id>
+					<url>https://repo.jenkins-ci.org/public/</url>
+				</repository>
+			</repositories>
+			<pluginRepositories>
+				<pluginRepository>
+					<id>repo.jenkins-ci.org</id>
+					<url>https://repo.jenkins-ci.org/public/</url>
+				</pluginRepository>
+			</pluginRepositories>
+		</profile>
+		<profile>
+			<!-- dev-repo contains: development builds -->
+			<id>repo-development</id>
+			<repositories>
+				<repository>
+					<id>runeduniverse-development</id>
+					<url>
+						https://nexus.runeduniverse.net/repository/maven-development/
+					</url>
+				</repository>
+			</repositories>
+		</profile>
+	</profiles>
+
 	<build>
 		<resources>
 			<resource>
 				<directory>src/main/resources</directory>
 			</resource>
+			<resource>
+				<directory>${basedir}</directory>
+				<targetPath>META-INF</targetPath>
+				<includes>
+					<include>LICENSE</include>
+				</includes>
+			</resource>
 		</resources>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-clean-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-toolchains-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>net.revelc.code.formatter</groupId>
+				<artifactId>formatter-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>com.mycila</groupId>
+				<artifactId>license-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>build-helper-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-install-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-deploy-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>net.runeduniverse.tools.maven.workflow</groupId>
+				<artifactId>maven-jenkins-workflow</artifactId>
+			</plugin>
+		</plugins>
+		<pluginManagement>
+			<plugins>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-toolchains-plugin</artifactId>
+					<version>${plugin-maven-toolchains-version}</version>
+					<configuration>
+						<toolchains>
+							<jdk>
+								<version>openjdk-${openjdk-min-version}</version>
+							</jdk>
+						</toolchains>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>net.revelc.code.formatter</groupId>
+					<artifactId>formatter-maven-plugin</artifactId>
+					<version>${plugin-revelc-formatter-version}</version>
+					<configuration>
+						<configFile>
+							${root-dir}/.code-formats/runed-code-format-java.xml
+						</configFile>
+						<lineEnding>LF</lineEnding>
+						<skipHtmlFormatting>true</skipHtmlFormatting>
+						<skipJsFormatting>true</skipJsFormatting>
+						<skipCssFormatting>true</skipCssFormatting>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>com.diffplug.spotless</groupId>
+					<artifactId>spotless-maven-plugin</artifactId>
+					<configuration>
+						<!-- Another plugin does that! -->
+						<!-- in case you want to enable it: -->
+						<!-- 1st make sure it doesn't mess with the pom files!!! -->
+						<applySkip>true</applySkip>
+						<checkSkip>true</checkSkip>
+						<java>
+							<eclipse>
+								<file>
+									${root-dir}/.code-formats/runed-code-format-java.xml
+								</file>
+							</eclipse>
+						</java>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-enforcer-plugin</artifactId>
+					<executions>
+						<execution>
+							<id>display-info</id>
+							<configuration>
+								<rules>
+									<requirePluginVersions>
+										<banSnapshots>false</banSnapshots>
+										<!-- r4m injects itself as plugin -->
+										<unCheckedPluginList>
+											net.runeduniverse.tools.maven.r4m:r4m-maven-extension
+										</unCheckedPluginList>
+									</requirePluginVersions>
+								</rules>
+							</configuration>
+						</execution>
+					</executions>
+				</plugin>
+				<plugin>
+					<groupId>com.mycila</groupId>
+					<artifactId>license-maven-plugin</artifactId>
+					<version>${plugin-mycila-license-version}</version>
+					<configuration>
+						<properties>
+							<year>2026</year>
+							<owner>VenaNocta</owner>
+							<email>venanocta@gmail.com</email>
+						</properties>
+						<mapping>
+							<java>SLASHSTAR_STYLE</java>
+						</mapping>
+						<licenseSets>
+							<licenseSet>
+								<header>${root-dir}/src/license/header.txt</header>
+								<excludes>
+									<exclude>.build/**</exclude>
+									<exclude>**/.mvn/repo/**</exclude>
+									<exclude>**/resources/**</exclude>
+									<exclude>**/license/**</exclude>
+									<exclude>**/target/**</exclude>
+									<exclude>**/work/**</exclude>
+								</excludes>
+							</licenseSet>
+						</licenseSets>
+						<dependencyEnforce>${license-enforce}</dependencyEnforce>
+						<dependencyExceptionMessage>1 or more dependencies got
+							rejected due to invalid licenses! Contact the
+							Maintainer for a solution!</dependencyExceptionMessage>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-surefire-plugin</artifactId>
+					<configuration>
+						<trimStackTrace>false</trimStackTrace>
+						<!-- 
+						<useModulePath>false</useModulePath>
+						-->
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>net.runeduniverse.tools.maven.workflow</groupId>
+					<artifactId>maven-jenkins-workflow</artifactId>
+					<version>${maven-jenkins-workflow-version}</version>
+				</plugin>
+			</plugins>
+		</pluginManagement>
 	</build>
 </project>

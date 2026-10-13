@@ -1,3 +1,8 @@
-/target/
-java_pid*.hprof
+.mvn/repo/
+**/target/
+**/*.log
+
+# mvn hpi:run
+work
+archive
 
