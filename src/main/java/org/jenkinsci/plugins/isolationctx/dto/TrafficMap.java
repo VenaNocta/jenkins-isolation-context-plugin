@@ -27,10 +27,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
-
-import org.jenkinsci.plugins.isolationctx.config.IpUtils;
 import java.util.Set;
 import hudson.Util;
+import jenkins.runeduniverse.utils.api.IpUtils;
 import net.runeduniverse.lib.utils.net.api.Ip4Address;
 import net.runeduniverse.lib.utils.net.api.Ip6Address;
 import net.runeduniverse.lib.utils.net.api.IpAddress;

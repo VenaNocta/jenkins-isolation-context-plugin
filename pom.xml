@@ -100,9 +100,9 @@
 		<!-- ARTIFACT VERSIONS - BOMs -->
 		<jenkins-tools-bom-version>2.580.x</jenkins-tools-bom-version>
 		<jenkins-tools-bom-patch>7169.vb_32a_cfd93fa_6</jenkins-tools-bom-patch>
-		<runeduniverse-utils-bom-version>2.0.1</runeduniverse-utils-bom-version>
 		<!-- ARTIFACT VERSIONS -->
 		<jenkins.version>2.568.3</jenkins.version>
+		<runeduniverse-utils-api.version>1-2.0.1-999999.vSNAPSHOT</runeduniverse-utils-api.version>
 		<!-- ARTIFACT VERSIONS - COMPILER -->
 		<openjdk-min-version>${maven.compiler.release}</openjdk-min-version>
 		<plugin-revelc-formatter-version>2.23.0</plugin-revelc-formatter-version>
@@ -119,6 +119,11 @@
 		<dependency>
 			<groupId>org.jenkins-ci.plugins</groupId>
 			<artifactId>variant</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.jenkins-ci.plugins</groupId>
+			<artifactId>runeduniverse-utils-api</artifactId>
+			<version>${runeduniverse-utils-api.version}</version>
 		</dependency>
 
 		<!-- OPTIONAL -->
@@ -149,10 +154,6 @@
 		</dependency>
 
 		<!-- non packaged dependencies -->
-		<dependency>
-			<groupId>net.runeduniverse.lib.utils</groupId>
-			<artifactId>utils-net</artifactId>
-		</dependency>
 
 		<!-- COMPILER -->
 		<dependency>
@@ -182,15 +183,6 @@
 				<groupId>io.jenkins.tools.bom</groupId>
 				<artifactId>bom-${jenkins-tools-bom-version}</artifactId>
 				<version>${jenkins-tools-bom-patch}</version>
-				<type>pom</type>
-				<scope>import</scope>
-			</dependency>
-
-			<!-- UTILS -->
-			<dependency>
-				<groupId>net.runeduniverse.lib.utils</groupId>
-				<artifactId>utils-bom</artifactId>
-				<version>${runeduniverse-utils-bom-version}</version>
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>

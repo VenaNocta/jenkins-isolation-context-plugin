@@ -40,6 +40,7 @@ import hudson.model.Run;
 import hudson.model.Saveable;
 import hudson.model.TaskListener;
 import jenkins.model.Jenkins;
+import jenkins.runeduniverse.utils.api.IpNetUtils;
 import net.runeduniverse.lib.utils.net.IpNetworkUtils;
 import net.runeduniverse.lib.utils.net.api.Ip4Address;
 import net.runeduniverse.lib.utils.net.api.IpAddress;

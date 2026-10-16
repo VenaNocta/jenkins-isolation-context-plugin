@@ -21,10 +21,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.jenkinsci.plugins.isolationctx.FirewallDelegate;
-import org.jenkinsci.plugins.isolationctx.config.IpUtils;
 import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
 
 import hudson.model.TaskListener;
+import jenkins.runeduniverse.utils.api.IpUtils;
 import net.runeduniverse.lib.utils.net.api.IpAddress;
 import net.runeduniverse.lib.utils.net.api.IpNetAddress;
 
