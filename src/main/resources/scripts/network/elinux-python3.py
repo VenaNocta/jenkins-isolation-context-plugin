@@ -42,12 +42,12 @@ def remove_systemd_link():
         pass
 
 
-def setup(nft):
+def setup():
     write_udev_rule()
     write_udev_rule()
 
 
-def shutdown(nft):
+def shutdown():
     remove_udev_rule()
     remove_systemd_link()
 
@@ -64,13 +64,10 @@ usage: script.py setup/shutdown\
 
     op = sys.argv[1]
 
-    nft = Nftables()
-    nft.set_json_output(True)
-
     if op == "setup":
-        setup(nft)
+        setup()
     elif op == "shutdown":
-        shutdown(nft)
+        shutdown()
     else:
         print("unknown op: " + op)
         sys.exit(1)
