@@ -22,10 +22,12 @@ import java.io.Serializable;
 import java.net.UnknownHostException;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedSet;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Predicate;
 import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
@@ -57,7 +59,7 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 	protected transient final Object lock6 = new Object();
 	protected transient final Object lockPorts = new Object();
 
-	protected transient Node node;
+	protected transient Computer computer;
 	protected transient NodeIsolationHandler handler;
 
 	protected final SortedSet<IpNet4Address> subnet4Stack;
@@ -68,7 +70,7 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 	protected IpNet4Address subnet4;
 	protected IpNet6Address subnet6;
 
-	public NodeIsolationRuntimeAction(final Node owner) {
+	public NodeIsolationRuntimeAction(final Computer owner) {
 		this(owner,
 				// Ipv4
 				IpNetworkUtils.createIpNet4Address(new byte[] { (byte) 0xac, 0x14, 0x00, 0x01 }, (short) 16),
@@ -79,12 +81,12 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 				new TrafficMap());
 	}
 
-	protected NodeIsolationRuntimeAction(final Node node, //
+	protected NodeIsolationRuntimeAction(final Computer computer, //
 			final IpNet4Address subnet4, final SortedSet<IpNet4Address> subnet4Stack,
 			final Map<IpNet4Address, String> subnet4Reservations, //
 			final IpNet6Address subnet6, //
 			final TrafficMap openPorts) {
-		this.node = node;
+		this.computer = computer;
 		// Ipv4
 		this.subnet4 = subnet4;
 		this.subnet4Stack = subnet4Stack;
@@ -92,10 +94,6 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 		// Ipv6
 		this.subnet6 = subnet6;
 		this.openPorts = openPorts;
-	}
-
-	public Node node() {
-		return this.node;
 	}
 
 	public NodeIsolationHandler isolationHandler() {
@@ -142,6 +140,21 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 	public void setup(final TaskListener listener) throws IOException, InterruptedException {
 		isolationHandler().setup(listener);
 		isolationHandler().firewallInputRetainOpen(this.openPorts, listener);
+		// cleanup broken reservations
+		final Set<String> runIds2Free = new LinkedHashSet<>();
+		for (Entry<IpNet4Address, String> entry : this.subnet4Reservations.entrySet()) {
+			final String runId = entry.getValue();
+			try {
+				final Run<?, ?> run = Run.fromExternalizableId(entry.getValue());
+				if (!run.isInProgress()) {
+					runIds2Free.add(runId);
+					continue;
+				}
+			} catch (IllegalArgumentException ignored) {
+				runIds2Free.add(runId);
+			}
+		}
+		freeAllSubnetsOf(runIds2Free, listener);
 	}
 
 	public IpNet4Address reserveIpv4Subnet(final Run<?, ?> run, final TaskListener listener)
@@ -213,15 +226,17 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 		}
 	}
 
-	public void freeAllSubnetsOf(final String extId, final TaskListener listener)
+	public void freeAllSubnetsOf(final Set<String> extIds, final TaskListener listener)
 			throws IOException, InterruptedException {
+		if (extIds.isEmpty())
+			return;
 		final TrafficMap map = new TrafficMap();
 		synchronized (this.lock4) {
 			synchronized (this.lockPorts) {
 				for (Iterator<Entry<IpNet4Address, String>> i = this.subnet4Reservations.entrySet()
 						.iterator(); i.hasNext();) {
 					final Entry<IpNet4Address, String> entry = i.next();
-					if (extId.equals(entry.getValue())) {
+					if (extIds.contains(entry.getValue())) {
 						i.remove();
 						map.add(this.openPorts.removeAll(entry.getKey()));
 					}
@@ -242,7 +257,7 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 
 	@Override
 	public void save() throws IOException {
-		final FilePath configFile = getConfigFile(this.node);
+		final FilePath configFile = getConfigFile(this.computer.getNode());
 		try (OutputStream stream = configFile.write()) {
 			Jenkins.XSTREAM2.toXMLUTF8(this, stream);
 		} catch (InterruptedException e) {
@@ -260,17 +275,18 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 				.child("isolation-ctx.xml");
 	}
 
-	protected static void injectHandler(final NodeIsolationRuntimeAction action, final Node node) {
-		final NodeIsolationHandlerProvider provider = NodeIsolationHandlerProvider.providerFor(node);
+	protected static void injectHandler(final NodeIsolationRuntimeAction action, final Computer computer)
+			throws IOException, InterruptedException {
+		final NodeIsolationHandlerProvider provider = NodeIsolationHandlerProvider.providerFor(computer);
 		if (provider != null)
-			action.handler = provider.buildHandler(node);
+			action.handler = provider.buildHandler(computer);
 	}
 
-	protected static NodeIsolationRuntimeAction load(final Node node) throws IOException, InterruptedException {
-		final FilePath configFile = getConfigFile(node);
+	protected static NodeIsolationRuntimeAction load(final Computer computer) throws IOException, InterruptedException {
+		final FilePath configFile = getConfigFile(computer.getNode());
 		if (!configFile.exists()) {
-			final NodeIsolationRuntimeAction action = new NodeIsolationRuntimeAction(node);
-			injectHandler(action, node);
+			final NodeIsolationRuntimeAction action = new NodeIsolationRuntimeAction(computer);
+			injectHandler(action, computer);
 			action.save();
 			return action;
 		}
@@ -280,21 +296,18 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 			action = (NodeIsolationRuntimeAction) Jenkins.XSTREAM2.fromXML(stream);
 		}
 
-		action.node = node;
-		injectHandler(action, node);
+		action.computer = computer;
+		injectHandler(action, computer);
 		return action;
 	}
 
-	public synchronized static NodeIsolationRuntimeAction get(final Node node)
+	public synchronized static NodeIsolationRuntimeAction get(final Computer computer)
 			throws IOException, InterruptedException {
-		if (node == null)
-			return null;
-		final Computer computer = node.toComputer();
 		if (computer == null)
 			return null;
 		NodeIsolationRuntimeAction action = computer.getAction(NodeIsolationRuntimeAction.class);
 		if (action == null)
-			computer.addAction(action = load(node));
+			computer.addAction(action = load(computer));
 		return action;
 	}
 

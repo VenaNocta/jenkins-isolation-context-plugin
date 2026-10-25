@@ -15,23 +15,25 @@
  */
 package org.jenkinsci.plugins.isolationctx.handler;
 
+import java.io.IOException;
+
 import hudson.ExtensionList;
 import hudson.ExtensionPoint;
-import hudson.model.Node;
+import hudson.model.Computer;
 
 public interface NodeIsolationHandlerProvider extends ExtensionPoint {
 
-	public boolean isApplicable(Node node);
+	public boolean isApplicable(Computer computer);
 
-	public NodeIsolationHandler buildHandler(Node node);
+	public NodeIsolationHandler buildHandler(Computer computer) throws IOException, InterruptedException;
 
 	public static ExtensionList<NodeIsolationHandlerProvider> all() {
 		return ExtensionList.lookup(NodeIsolationHandlerProvider.class);
 	}
 
-	public static NodeIsolationHandlerProvider providerFor(final Node node) {
+	public static NodeIsolationHandlerProvider providerFor(final Computer computer) {
 		return all().stream()
-				.filter(p -> p.isApplicable(node))
+				.filter(p -> p.isApplicable(computer))
 				.findFirst()
 				.orElse(null);
 	}

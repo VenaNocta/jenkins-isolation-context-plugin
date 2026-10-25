@@ -23,16 +23,12 @@ import org.jenkinsci.plugins.isolationctx.handler.NodeIsolationHandlerProvider;
 
 import hudson.Extension;
 import hudson.model.Computer;
-import hudson.model.Node;
 
 @Extension
 public class LnxNodeIsolationHandlerProvider implements NodeIsolationHandlerProvider {
 
 	@Override
-	public boolean isApplicable(final Node node) {
-		if (node == null)
-			return false;
-		final Computer computer = node.toComputer();
+	public boolean isApplicable(final Computer computer) {
 		if (computer == null)
 			return false;
 
@@ -50,7 +46,7 @@ public class LnxNodeIsolationHandlerProvider implements NodeIsolationHandlerProv
 	}
 
 	@Override
-	public NodeIsolationHandler buildHandler(final Node node) {
-		return new LnxNodeIsolationHandler(node);
+	public NodeIsolationHandler buildHandler(final Computer computer) throws IOException, InterruptedException {
+		return new LnxNodeIsolationHandler(computer);
 	}
 }

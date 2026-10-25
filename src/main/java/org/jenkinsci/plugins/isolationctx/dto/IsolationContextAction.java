@@ -50,22 +50,33 @@ public class IsolationContextAction extends InvisibleAction implements FlowNodeA
 		this._future = null;
 	}
 
+	@Override
+	public void onLoad(final FlowNode parent) {
+		this._flowNode = parent;
+		if (this.context != null) {
+			this.context.onLoad(parent);
+			this._future = CompletableFuture.completedFuture(this.context);
+		}
+	}
+
+	// NOTE: never make build() synchronized => deadlock!
+	protected IsolationContext build() {
+		try {
+			final IsolationContext context = this.builder.build(this._flowNode);
+			if (context != null)
+				context.setup();
+			return this.context = context;
+		} catch (Throwable e) {
+			throw new CompletionException(e);
+		}
+	}
+
 	protected synchronized CompletableFuture<IsolationContext> getContextFuture() {
 		if (this._future != null)
 			return this._future;
 		if (this.builder == null)
 			return this._future = CompletableFuture.completedFuture(null);
 		return this._future = CompletableFuture.supplyAsync(this::build);
-	}
-
-	protected IsolationContext build() {
-		try {
-			final IsolationContext context = this.builder.build(this._flowNode);
-			context.setup();
-			return this.context = context;
-		} catch (Throwable e) {
-			throw new CompletionException(e);
-		}
 	}
 
 	public synchronized IsolationContext getContext() throws InterruptedException, IOException {
@@ -103,15 +114,6 @@ public class IsolationContextAction extends InvisibleAction implements FlowNodeA
 			if (t != null)
 				throw new IOException(t);
 			return null;
-		}
-	}
-
-	@Override
-	public void onLoad(final FlowNode parent) {
-		this._flowNode = parent;
-		if (this.context != null) {
-			this.context.onLoad(parent);
-			this._future = CompletableFuture.completedFuture(this.context);
 		}
 	}
 }

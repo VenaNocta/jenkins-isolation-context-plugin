@@ -22,7 +22,6 @@ import org.jenkinsci.plugins.isolationctx.config.NodeIsolationRuntimeAction;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.model.Computer;
-import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.slaves.ComputerListener;
 
@@ -37,10 +36,9 @@ public class IsolationContextComputerListener extends ComputerListener {
 			throws IOException, InterruptedException {
 
 		final EnvVars env = computer.getEnvironment();
-		final Node node = computer.getNode();
 
 		try {
-			final NodeIsolationRuntimeAction runtime = NodeIsolationRuntimeAction.get(node);
+			final NodeIsolationRuntimeAction runtime = NodeIsolationRuntimeAction.get(computer);
 			if (runtime == null)
 				return;
 

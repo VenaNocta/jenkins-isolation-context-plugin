@@ -45,8 +45,9 @@ public class IsolationContextRunListener extends RunListener<Run<?, ?>> {
 		final IsolationContextAction action = run.getAction(IsolationContextAction.class);
 		try {
 			if (action != null) {
-				action.getContext()
-						.destroy();
+				final IsolationContext context = action.getContext();
+				if (context != null)
+					context.destroy();
 			}
 		} catch (IOException | InterruptedException e) {
 			e.printStackTrace(listener.getLogger());

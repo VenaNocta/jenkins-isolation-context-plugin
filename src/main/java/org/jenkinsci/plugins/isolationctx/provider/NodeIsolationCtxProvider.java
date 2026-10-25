@@ -33,6 +33,7 @@ import org.jenkinsci.plugins.isolationctx.handler.NodeIsolationHandler;
 import org.jenkinsci.plugins.isolationctx.hooks.IsolationContextRunListener;
 import org.jenkinsci.plugins.variant.OptionalExtension;
 
+import hudson.model.Computer;
 import hudson.model.Node;
 import hudson.model.Run;
 import hudson.model.TaskListener;
@@ -74,30 +75,31 @@ public class NodeIsolationCtxProvider implements IsolationContextProvider {
 			final Run<?, ?> run = (this._context == null ? //
 					IsolationContextBuilder.findContext(flowNode) : this._context).get(Run.class);
 			// bypass context isolation if allowed
-			if (!IsolationContextRunListener.isIsolationForced(run) && NodeIsolationProperty.isDisabled(node))
+			if (!IsolationContextRunListener.isIsolationForced(run) && NodeIsolationProperty.isDisabled(node)) {
 				return null;
+			}
 
-			return selectIsolationContext(flowNode, node, this._context, ws);
+			return selectIsolationContext(flowNode, node.toComputer(), this._context, ws);
 		}
 
-		protected IsolationContext selectIsolationContext(final FlowNode flowNode, final Node node,
+		protected IsolationContext selectIsolationContext(final FlowNode flowNode, final Computer computer,
 				final StepContext context, final WorkspaceAction ws) throws IOException, InterruptedException {
 			final NodeIsolationHandler isolationHandler;
 			{
-				final NodeIsolationRuntimeAction isolationRuntime = NodeIsolationRuntimeAction.get(node);
+				final NodeIsolationRuntimeAction isolationRuntime = NodeIsolationRuntimeAction.get(computer);
 				isolationHandler = isolationRuntime == null ? null : isolationRuntime.isolationHandler();
 			}
 
 			final Run<?, ?> run = context.get(Run.class);
 			final TaskListener listener = context.get(TaskListener.class);
 
-			if (isolationHandler.isActive() == false) {
+			if (isolationHandler == null || isolationHandler.isActive() == false) {
 				listener.error("Context Isolation currently not available on this Node!");
 				return null;
 			}
 
 			if (isolationHandler instanceof LnxNodeIsolationHandler) {
-				return new LinuxNodeNamespaceContext(run, node, ws, listener);
+				return new LinuxNodeNamespaceContext(run, computer, ws, listener);
 			}
 			return null;
 		}

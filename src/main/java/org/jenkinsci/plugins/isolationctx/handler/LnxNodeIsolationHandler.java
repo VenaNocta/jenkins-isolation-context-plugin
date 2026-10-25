@@ -41,7 +41,6 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.Computer;
-import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.util.ArgumentListBuilder;
 import hudson.util.LogTaskListener;
@@ -55,36 +54,40 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 	protected final AtomicBoolean active = new AtomicBoolean(false);
 
 	@NonNull
-	protected final Node node;
-	@NonNull
 	protected final Computer computer;
 	@NonNull
-	protected final FilePath logPath;
+	protected final String _logPath;
 	@NonNull
-	protected final FilePath rootPath;
+	protected final String _rootPath;
 	@NonNull
-	protected final FilePath dataRootPath;
+	protected final String _dataRootPath;
 	@NonNull
-	protected final FilePath firewallToolPath;
+	protected final String _firewallToolPath;
 	@NonNull
-	protected final FilePath mountToolPath;
+	protected final String _mountToolPath;
 	@NonNull
-	protected final FilePath ociRuntimeToolPath;
+	protected final String _ociRuntimeToolPath;
+
 	@CheckForNull
 	protected TaskListener logListener;
 
-	public LnxNodeIsolationHandler(@NonNull final Node node) {
-		Objects.requireNonNull(this.node = node);
-		Objects.requireNonNull(this.computer = node.toComputer());
+	public LnxNodeIsolationHandler(@NonNull final Computer computer) throws IOException, InterruptedException {
+		// NOTE: never persist Node
+		// -> it's a DTO and is updated on every Computer reconnect!
+		Objects.requireNonNull(this.computer = computer);
 
-		this.logPath = node.getRootPath()
-				.child("logs/NodeIsolation.log");
-		this.rootPath = this.node.getRootPath()
-				.child("isolation-context");
-		this.dataRootPath = this.rootPath.child("data");
-		this.firewallToolPath = this.rootPath.child("firewall-tool.py");
-		this.mountToolPath = this.rootPath.child("mount-tool.py");
-		this.ociRuntimeToolPath = this.rootPath.child("oci-runtime-tool.sh");
+		final FilePath rootPath = this.computer.getNode()
+				.getRootPath();
+		this._logPath = rootPath.child("logs/NodeIsolation.log")
+				.absolutize()
+				.getRemote();
+		this._rootPath = rootPath.child("isolation-context")
+				.absolutize()
+				.getRemote();
+		this._dataRootPath = "data";
+		this._firewallToolPath = "firewall-tool.py";
+		this._mountToolPath = "mount-tool.py";
+		this._ociRuntimeToolPath = "oci-runtime-tool.sh";
 	}
 
 	@Override
@@ -92,12 +95,41 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 		return this.active.get();
 	}
 
+	protected final FilePath logPath() {
+		return new FilePath(this.computer.getChannel(), this._logPath);
+	}
+
+	protected final FilePath rootPath() {
+		return new FilePath(this.computer.getChannel(), this._rootPath);
+	}
+
+	protected final FilePath dataRootPath() {
+		return rootPath().child(this._dataRootPath);
+	}
+
+	protected final FilePath firewallToolPath() {
+		return rootPath().child(this._firewallToolPath);
+	}
+
+	protected final FilePath mountToolPath() {
+		return rootPath().child(this._mountToolPath);
+	}
+
+	protected final FilePath ociRuntimeToolPath() {
+		return rootPath().child(this._ociRuntimeToolPath);
+	}
+
+	public final Launcher createLauncher(final TaskListener listener) {
+		return this.computer.getNode()
+				.createLauncher(listener);
+	}
+
 	@Override
 	public synchronized TaskListener logTaskListener() {
 		if (this.logListener != null)
 			return this.logListener;
 		try {
-			return this.logListener = new StreamTaskListener(this.logPath.write(), StandardCharsets.UTF_8);
+			return this.logListener = new StreamTaskListener(logPath().write(), StandardCharsets.UTF_8);
 		} catch (IOException | InterruptedException e) {
 			final TaskListener listener = new LogTaskListener(LOGGER, Level.INFO);
 			listener.error("Failed to create Remote-Logger, redirection activated!");
@@ -109,17 +141,17 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 	protected void execScriptTask(final Collection<String> tasks, final TaskListener listener)
 			throws IOException, InterruptedException {
 		// deploy file from resources -> path
-		final FilePath networkPath = this.rootPath.child("network-tool.py");
+		final FilePath networkPath = rootPath().child("network-tool.py");
 		// jar:/scripts/network/elinux-python3.py
 		Scripts.NETWORK__ENTERPRISE_LINUX_PYTHON3.deployTo(networkPath);
 		// jar:/scripts/firewall/nftables-python3.py
-		Scripts.FIREWALL__NFTABLES_PYTHON3.deployTo(this.firewallToolPath);
+		Scripts.FIREWALL__NFTABLES_PYTHON3.deployTo(firewallToolPath());
 		// jar:/scripts/data/linux-mount-python3.py
-		Scripts.DATA__LINUX_MOUNT_PYTHON3.deployTo(this.mountToolPath);
+		Scripts.DATA__LINUX_MOUNT_PYTHON3.deployTo(mountToolPath());
 		// jar:/scripts/runtime/linux-crun.sh
-		Scripts.RUNTIME__LINUX_CRUN_SHELL.deployTo(this.ociRuntimeToolPath);
+		Scripts.RUNTIME__LINUX_CRUN_SHELL.deployTo(ociRuntimeToolPath());
 
-		final Launcher launcher = this.node.createLauncher(listener);
+		final Launcher launcher = createLauncher(listener);
 		// network setup
 		launcher.launch()
 				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", networkPath.absolutize()
@@ -128,19 +160,19 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 				.joinWithTimeout(30, TimeUnit.SECONDS, listener);
 		// firewall setup
 		launcher.launch()
-				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", this.firewallToolPath.absolutize()
+				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", firewallToolPath().absolutize()
 						.getRemote()).add(tasks))
 				.start()
 				.joinWithTimeout(30, TimeUnit.SECONDS, listener);
 		// mount isolation setup
 		launcher.launch()
-				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", this.mountToolPath.absolutize()
+				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", mountToolPath().absolutize()
 						.getRemote()).add(tasks))
 				.start()
 				.joinWithTimeout(30, TimeUnit.SECONDS, listener);
 		// runtime setup
 		launcher.launch()
-				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/bash", this.ociRuntimeToolPath.absolutize()
+				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/bash", ociRuntimeToolPath().absolutize()
 						.getRemote()).add(tasks))
 				.start()
 				.joinWithTimeout(30, TimeUnit.SECONDS, listener);
@@ -169,8 +201,8 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 
 	protected void networkHostInterfaceExec(final Set<String> data, final String operation, final TaskListener listener)
 			throws IOException, InterruptedException {
-		this.dataRootPath.mkdirs();
-		final FilePath tmpFilePath = this.dataRootPath.createTempFile("hostif-", ".csv");
+		dataRootPath().mkdirs();
+		final FilePath tmpFilePath = dataRootPath().createTempFile("hostif-", ".csv");
 		try {
 			try (OutputStream stream = tmpFilePath.write()) {
 				for (String hostif : data) {
@@ -179,12 +211,11 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 				}
 				stream.flush();
 			}
-			final Launcher launcher = this.node.createLauncher(listener);
+			final Launcher launcher = createLauncher(listener);
 			launcher.launch()
-					.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3",
-							this.firewallToolPath.absolutize()
-									.getRemote()).add("set", "hostif", operation, tmpFilePath.absolutize()
-											.getRemote()))
+					.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", firewallToolPath().absolutize()
+							.getRemote()).add("set", "hostif", operation, tmpFilePath.absolutize()
+									.getRemote()))
 					.start()
 					.joinWithTimeout(30, TimeUnit.SECONDS, listener);
 		} finally {
@@ -214,9 +245,9 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 	}
 
 	public void networkHostInterfaceRemoveAll(final TaskListener listener) throws IOException, InterruptedException {
-		final Launcher launcher = this.node.createLauncher(listener);
+		final Launcher launcher = createLauncher(listener);
 		launcher.launch()
-				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", this.firewallToolPath.absolutize()
+				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", firewallToolPath().absolutize()
 						.getRemote()).add("set", "hostif", "clear"))
 				.start()
 				.joinWithTimeout(30, TimeUnit.SECONDS, listener);
@@ -224,8 +255,8 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 
 	protected void firewallInputExec(final TrafficMap data, final String operation, final TaskListener listener)
 			throws IOException, InterruptedException {
-		this.dataRootPath.mkdirs();
-		final FilePath tmpFilePath = this.dataRootPath.createTempFile("traffic-", ".csv");
+		dataRootPath().mkdirs();
+		final FilePath tmpFilePath = dataRootPath().createTempFile("traffic-", ".csv");
 		try {
 			try (OutputStream stream = tmpFilePath.write()) {
 				data.forEach((host, external, protoMap) -> {
@@ -247,12 +278,10 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 				});
 				stream.flush();
 			}
-			this.node.createLauncher(listener)
-					.launch()
-					.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3",
-							this.firewallToolPath.absolutize()
-									.getRemote()).add("set", "traffic-port", operation, tmpFilePath.absolutize()
-											.getRemote()))
+			createLauncher(listener).launch()
+					.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", firewallToolPath().absolutize()
+							.getRemote()).add("set", "traffic-port", operation, tmpFilePath.absolutize()
+									.getRemote()))
 					.start()
 					.joinWithTimeout(30, TimeUnit.SECONDS, listener);
 		} finally {
@@ -287,9 +316,9 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 	@Override
 	public void firewallInputCloseAll(final TaskListener listener) throws IOException, InterruptedException {
 		final TaskListener nodeLog = logTaskListener();
-		final Launcher launcher = this.node.createLauncher(nodeLog);
+		final Launcher launcher = createLauncher(nodeLog);
 		launcher.launch()
-				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", this.firewallToolPath.absolutize()
+				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", firewallToolPath().absolutize()
 						.getRemote()).add("set", "traffic-port", "clear"))
 				.start()
 				.joinWithTimeout(30, TimeUnit.SECONDS, nodeLog);
@@ -297,9 +326,9 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 
 	protected void mountToolExec(final List<String> operations, final TaskListener listener)
 			throws IOException, InterruptedException {
-		final Launcher launcher = this.node.createLauncher(listener);
+		final Launcher launcher = createLauncher(listener);
 		launcher.launch()
-				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", this.mountToolPath.absolutize()
+				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", mountToolPath().absolutize()
 						.getRemote()).add(operations))
 				.start()
 				.joinWithTimeout(30, TimeUnit.SECONDS, listener);
@@ -346,11 +375,11 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 		}
 
 		public FilePath basePath() {
-			return new FilePath(this.handler.node.getChannel(), this.basePath);
+			return new FilePath(this.handler.computer.getChannel(), this.basePath);
 		}
 
 		public FilePath rootPath() {
-			return new FilePath(this.handler.node.getChannel(), this.rootPath);
+			return new FilePath(this.handler.computer.getChannel(), this.rootPath);
 		}
 
 		public FilePath workspacePath() {
@@ -366,9 +395,9 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 
 	protected int ociRuntimeToolExec(final List<String> operations, final TaskListener listener)
 			throws IOException, InterruptedException {
-		final Launcher launcher = this.node.createLauncher(listener);
+		final Launcher launcher = createLauncher(listener);
 		return launcher.launch()
-				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/bash", this.ociRuntimeToolPath.absolutize()
+				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/bash", ociRuntimeToolPath().absolutize()
 						.getRemote()).add(operations))
 				.start()
 				.joinWithTimeout(20, TimeUnit.SECONDS, listener);
@@ -400,7 +429,7 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 		if (processId == -1 || configs.isEmpty())
 			return false;
 		final TaskListener nodeLog = logTaskListener();
-		final FilePath tmpFilePath = this.dataRootPath.createTempFile("ociMounts-", ".json");
+		final FilePath tmpFilePath = dataRootPath().createTempFile("ociMounts-", ".json");
 		try (OutputStream stream = tmpFilePath.write()) {
 			final String content = "[" + configs.stream()
 					.map(LinuxMountEntry::toOciJson)
@@ -422,7 +451,7 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 		if (processId == -1 || configs.isEmpty())
 			return false;
 		final TaskListener nodeLog = logTaskListener();
-		final FilePath tmpFilePath = this.dataRootPath.createTempFile("ociMounts-", ".json");
+		final FilePath tmpFilePath = dataRootPath().createTempFile("ociMounts-", ".json");
 		try (OutputStream stream = tmpFilePath.write()) {
 			final String content = "[" + configs.stream()
 					.map(LinuxMountEntry::toOciJson)

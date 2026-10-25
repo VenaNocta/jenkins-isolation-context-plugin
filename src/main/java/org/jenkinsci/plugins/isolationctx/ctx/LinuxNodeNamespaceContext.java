@@ -68,6 +68,7 @@ import hudson.FilePath.FileCallable;
 import hudson.Launcher;
 import hudson.LauncherDecorator;
 import hudson.Proc;
+import hudson.model.Computer;
 import hudson.model.Node;
 import hudson.model.Run;
 import hudson.model.TaskListener;
@@ -104,7 +105,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 	protected transient final WorkspaceLauncherUtil launchUtil = //
 			new WorkspaceLauncherUtil(this::getWorkspace, this::logListener);;
 	protected transient Run<?, ?> run;
-	protected transient Node node;
+	protected transient Computer computer;
 	protected transient WorkspaceAction ws;
 	protected transient TaskListener listener;
 
@@ -112,11 +113,11 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 	protected transient CompletableFuture<LinuxIdentity> _lnxIdentityFuture = null;
 	protected transient TaskListener _logListener = null;
 
-	public LinuxNodeNamespaceContext(final Run<?, ?> run, final Node node, final WorkspaceAction ws,
+	public LinuxNodeNamespaceContext(final Run<?, ?> run, final Computer computer, final WorkspaceAction ws,
 			final TaskListener listener) {
 		this.factory = new DecoratorFactory(this);
 		this.run = run;
-		this.node = node;
+		this.computer = computer;
 		this.ws = ws;
 		this.listener = listener;
 
@@ -130,8 +131,9 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 		Objects.requireNonNull(parent, "LinuxNodeNamespaceContext can not be loaded with FlowNode: null");
 
 		this.ws = parent.getAction(WorkspaceAction.class);
-		this.node = Jenkins.get()
-				.getNode(this.ws.getNode());
+		this.computer = Jenkins.get()
+				.getNode(this.ws.getNode())
+				.toComputer();
 
 		final String flowNodeId = parent.getId();
 		try {
@@ -179,7 +181,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 				CompletableFuture.supplyAsync(() -> LinuxIdentity.identify(this.launchUtil))
 						.thenApply(id -> id.removeGroupIds(//
 								LinuxIdentity.groupIdByName(this.launchUtil,
-										NodeIsolationProperty.getAdminGroup(this.node))));
+										NodeIsolationProperty.getAdminGroup(this.computer.getNode()))));
 	}
 
 	public LinuxIdentity lnxIdentity() throws IOException, InterruptedException {
@@ -198,7 +200,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 	}
 
 	protected NodeIsolationRuntime getNodeRuntime() throws IOException, InterruptedException {
-		return NodeIsolationRuntimeAction.get(this.node);
+		return NodeIsolationRuntimeAction.get(this.computer);
 	}
 
 	protected NodeIsolationRuntime getNodeRuntime2() {
@@ -405,8 +407,9 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 				if (nodeRuntime.isolationHandler() instanceof LnxNodeIsolationHandler handler) {
 					try {
 						// just try it even if it wasn't created - maybe it was lost before!
-						handler.overlayRemove(this.ws.getWorkspace()
-								.withSuffix("@overlay"));
+						final FilePath path = this.ws.getWorkspace();
+						if (path != null)
+							handler.overlayRemove(path.withSuffix("@overlay"));
 					} catch (IOException | InterruptedException e) {
 						e.printStackTrace(nodeLog);
 					}

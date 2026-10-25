@@ -17,19 +17,17 @@ package org.jenkinsci.plugins.isolationctx.config;
 
 import java.io.IOException;
 import java.net.UnknownHostException;
+import java.util.Set;
 
 import org.jenkinsci.plugins.isolationctx.FirewallDelegate;
 import org.jenkinsci.plugins.isolationctx.handler.NodeIsolationHandler;
 
-import hudson.model.Node;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import net.runeduniverse.lib.utils.net.api.IpNet4Address;
 import net.runeduniverse.lib.utils.net.api.IpNet6Address;
 
 public interface NodeIsolationRuntime extends FirewallDelegate {
-
-	public Node node();
 
 	public NodeIsolationHandler isolationHandler();
 
@@ -57,6 +55,6 @@ public interface NodeIsolationRuntime extends FirewallDelegate {
 
 	public void freeIpv6Subnet(IpNet6Address subnet, TaskListener listener) throws IOException, InterruptedException;
 
-	public void freeAllSubnetsOf(String extId, TaskListener listener) throws IOException, InterruptedException;
+	public void freeAllSubnetsOf(Set<String> extIds, TaskListener listener) throws IOException, InterruptedException;
 
 }
