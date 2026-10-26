@@ -109,7 +109,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 	protected transient WorkspaceAction ws;
 	protected transient TaskListener listener;
 
-	protected transient final SortedMap<Integer, LnxNetLink> _activeLinks = new TreeMap<>();
+	protected final SortedMap<Integer, LnxNetLink> _activeLinks = new TreeMap<>();
 	protected transient CompletableFuture<LinuxIdentity> _lnxIdentityFuture = null;
 	protected transient TaskListener _logListener = null;
 

@@ -18,7 +18,11 @@ package org.jenkinsci.plugins.isolationctx.ctx.net;
 import org.jenkinsci.plugins.isolationctx.FirewallDelegate;
 import org.jenkinsci.plugins.isolationctx.IsolationContext.NetLink;
 
-import net.runeduniverse.lib.utils.net.IpNetworkUtils;
+import jenkins.runeduniverse.utils.net.IpNetworkUtils;
+import jenkins.runeduniverse.utils.net.XStreamIp4Address;
+import jenkins.runeduniverse.utils.net.XStreamIp6Address;
+import jenkins.runeduniverse.utils.net.XStreamIpNet4Address;
+import jenkins.runeduniverse.utils.net.XStreamIpNet6Address;
 import net.runeduniverse.lib.utils.net.api.Ip4Address;
 import net.runeduniverse.lib.utils.net.api.Ip6Address;
 import net.runeduniverse.lib.utils.net.api.IpNet4Address;
@@ -40,12 +44,12 @@ public class DefaultNetLink implements NetLink {
 			final IpNet4Address subnet4, final Ip4Address hostAddr4, final Ip4Address contextAddr4, //
 			final IpNet6Address subnet6, final Ip6Address hostAddr6, final Ip6Address contextAddr6) {
 		this.firewall = firewall;
-		this.subnet4 = subnet4;
-		this.hostAddr4 = hostAddr4;
-		this.contextAddr4 = contextAddr4;
-		this.subnet6 = subnet6;
-		this.hostAddr6 = hostAddr6;
-		this.contextAddr6 = contextAddr6;
+		this.subnet4 = XStreamIpNet4Address.convert(subnet4);
+		this.hostAddr4 = XStreamIp4Address.convert(hostAddr4);
+		this.contextAddr4 = XStreamIp4Address.convert(contextAddr4);
+		this.subnet6 = XStreamIpNet6Address.convert(subnet6);
+		this.hostAddr6 = XStreamIp6Address.convert(hostAddr6);
+		this.contextAddr6 = XStreamIp6Address.convert(contextAddr6);
 	}
 
 	@Override

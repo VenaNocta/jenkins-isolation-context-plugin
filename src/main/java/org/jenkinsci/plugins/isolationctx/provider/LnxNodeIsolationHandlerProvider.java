@@ -31,7 +31,7 @@ public class LnxNodeIsolationHandlerProvider implements NodeIsolationHandlerProv
 	public boolean isApplicable(final Computer computer) {
 		if (computer == null)
 			return false;
-
+		// TODO require this handler to be selected!
 		try {
 			final Object value = computer.getSystemProperties()
 					.get("os.name");

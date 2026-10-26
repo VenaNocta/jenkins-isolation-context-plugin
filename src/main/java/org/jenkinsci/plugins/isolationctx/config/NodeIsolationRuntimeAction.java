@@ -23,16 +23,19 @@ import java.net.UnknownHostException;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.SortedSet;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
 import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
 import org.jenkinsci.plugins.isolationctx.handler.NodeIsolationHandler;
 import org.jenkinsci.plugins.isolationctx.handler.NodeIsolationHandlerProvider;
+
+import com.thoughtworks.xstream.annotations.XStreamOmitField;
 
 import hudson.FilePath;
 import hudson.model.Computer;
@@ -42,8 +45,9 @@ import hudson.model.Run;
 import hudson.model.Saveable;
 import hudson.model.TaskListener;
 import jenkins.model.Jenkins;
-import jenkins.runeduniverse.utils.api.IpNetUtils;
-import net.runeduniverse.lib.utils.net.IpNetworkUtils;
+import jenkins.runeduniverse.utils.net.IpNetworkUtils;
+import jenkins.runeduniverse.utils.net.XStreamIpNet4Address;
+import jenkins.runeduniverse.utils.net.XStreamIpNet6Address;
 import net.runeduniverse.lib.utils.net.api.Ip4Address;
 import net.runeduniverse.lib.utils.net.api.IpAddress;
 import net.runeduniverse.lib.utils.net.api.IpNet4Address;
@@ -55,15 +59,20 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 
 	private static final long serialVersionUID = 1L;
 
-	protected transient final Object lock4 = new Object();
-	protected transient final Object lock6 = new Object();
-	protected transient final Object lockPorts = new Object();
+	@XStreamOmitField
+	protected final Object lock4 = new Object();
+	@XStreamOmitField
+	protected final Object lock6 = new Object();
+	@XStreamOmitField
+	protected final Object lockPorts = new Object();
 
 	protected transient Computer computer;
 	protected transient NodeIsolationHandler handler;
 
 	protected final SortedSet<IpNet4Address> subnet4Stack;
 	protected final Map<IpNet4Address, String> subnet4Reservations;
+	protected final SortedSet<IpNet6Address> subnet6Stack;
+	protected final Map<IpNet6Address, String> subnet6Reservations;
 	// host-ip : source-ip : protocol : ports
 	protected final TrafficMap openPorts;
 
@@ -76,7 +85,7 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 				IpNetworkUtils.createIpNet4Address(new byte[] { (byte) 0xac, 0x14, 0x00, 0x01 }, (short) 16),
 				new TreeSet<>(), new LinkedHashMap<>(), //
 				// Ipv6
-				null,
+				null, new TreeSet<>(), new LinkedHashMap<>(), //
 				// open ports
 				new TrafficMap());
 	}
@@ -84,15 +93,31 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 	protected NodeIsolationRuntimeAction(final Computer computer, //
 			final IpNet4Address subnet4, final SortedSet<IpNet4Address> subnet4Stack,
 			final Map<IpNet4Address, String> subnet4Reservations, //
-			final IpNet6Address subnet6, //
+			final IpNet6Address subnet6, final SortedSet<IpNet6Address> subnet6Stack,
+			final Map<IpNet6Address, String> subnet6Reservations, //
 			final TrafficMap openPorts) {
 		this.computer = computer;
 		// Ipv4
-		this.subnet4 = subnet4;
-		this.subnet4Stack = subnet4Stack;
-		this.subnet4Reservations = subnet4Reservations;
+		this.subnet4 = XStreamIpNet4Address.convert(subnet4);
+		this.subnet4Stack = subnet4Stack.stream()
+				.map(XStreamIpNet4Address::convert)
+				.collect(Collectors.toCollection(TreeSet::new));
+		this.subnet4Reservations = subnet4Reservations.entrySet()
+				.stream()
+				.collect(Collectors.toMap(//
+						e -> XStreamIpNet4Address.convert(e.getKey()), Map.Entry::getValue, (a, b) -> a,
+						LinkedHashMap::new));
 		// Ipv6
-		this.subnet6 = subnet6;
+		this.subnet6 = XStreamIpNet6Address.convert(subnet6);
+		this.subnet6Stack = subnet6Stack.stream()
+				.map(XStreamIpNet6Address::convert)
+				.collect(Collectors.toCollection(TreeSet::new));
+		this.subnet6Reservations = subnet6Reservations.entrySet()
+				.stream()
+				.collect(Collectors.toMap(//
+						e -> XStreamIpNet6Address.convert(e.getKey()), Map.Entry::getValue, (a, b) -> a,
+						LinkedHashMap::new));
+		// Ports
 		this.openPorts = openPorts;
 	}
 
@@ -117,7 +142,7 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 
 	public void setIpv4Subnet(final IpNet4Address subnet) throws UnknownHostException {
 		synchronized (this.lock4) {
-			this.subnet4 = subnet;
+			this.subnet4 = XStreamIpNet4Address.convert(subnet);
 			trySave();
 		}
 	}
@@ -131,7 +156,7 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 
 	public void setIpv6Subnet(final IpNet6Address subnet) throws UnknownHostException {
 		synchronized (this.lock6) {
-			this.subnet6 = subnet;
+			this.subnet6 = XStreamIpNet6Address.convert(subnet);
 			trySave();
 		}
 	}
@@ -265,11 +290,6 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 		}
 	}
 
-	// XStream2 hook -> handles marshal on save()
-	private Object writeReplace() {
-		return NodeIsolationRuntimeSnapshot.marshal(this);
-	}
-
 	protected static FilePath getConfigFile(final Node node) {
 		return node.getRootPath()
 				.child("isolation-ctx.xml");
@@ -309,53 +329,6 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 		if (action == null)
 			computer.addAction(action = load(computer));
 		return action;
-	}
-
-	public static class NodeIsolationRuntimeSnapshot {
-
-		protected final String subnet4;
-		protected final String subnet6;
-
-		protected final List<String> subnet4Stack;
-		protected final Map<String, String> subnet4Reservations;
-		// host-ip : source-ip : protocol : ports
-		protected final TrafficMap openPorts;
-
-		public NodeIsolationRuntimeSnapshot(//
-				final String subnet4, final List<String> subnet4Stack, //
-				final Map<String, String> subnet4Reservations, //
-				final String subnet6, //
-				final TrafficMap openPorts) {
-			this.subnet4 = subnet4;
-			this.subnet4Stack = subnet4Stack;
-			this.subnet4Reservations = subnet4Reservations;
-			this.subnet6 = subnet6;
-			this.openPorts = openPorts;
-		}
-
-		// XStream2 hook -> handles unmarshal on load()
-		private Object readResolve() {
-			return new NodeIsolationRuntimeAction(null, //
-					// Ipv4
-					IpNetUtils.IPNET4_PARSER.apply(this.subnet4),
-					IpNetUtils.unmarshalCol(TreeSet::new, this.subnet4Stack, IpNetUtils.IPNET4_PARSER),
-					IpNetUtils.unmarshalMapKeys(LinkedHashMap::new, this.subnet4Reservations, IpNetUtils.IPNET4_PARSER),
-					// Ipv6
-					IpNetUtils.IPNET6_PARSER.apply(this.subnet6),
-					// open ports
-					this.openPorts);
-		}
-
-		public static NodeIsolationRuntimeSnapshot marshal(final NodeIsolationRuntimeAction prop) {
-			return new NodeIsolationRuntimeSnapshot(//
-					// Ipv4
-					prop.subnet4 == null ? null : prop.subnet4.toCidrNotation(),
-					IpNetUtils.marshalCol(prop.subnet4Stack), IpNetUtils.marshalMapKeys(prop.subnet4Reservations),
-					// Ipv6
-					prop.subnet6 == null ? null : prop.subnet6.toCidrNotation(),
-					// open ports
-					prop.openPorts);
-		}
 	}
 
 	@Override

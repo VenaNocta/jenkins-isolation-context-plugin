@@ -16,6 +16,7 @@
 package org.jenkinsci.plugins.isolationctx.ctx;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -24,11 +25,13 @@ import org.jenkinsci.plugins.isolationctx.FirewallDelegate;
 import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
 
 import hudson.model.TaskListener;
-import jenkins.runeduniverse.utils.api.IpUtils;
+import jenkins.runeduniverse.utils.net.IpNetworkUtils;
 import net.runeduniverse.lib.utils.net.api.IpAddress;
 import net.runeduniverse.lib.utils.net.api.IpNetAddress;
 
 public final class FirewallDelegateFilter implements FirewallDelegate {
+
+	private static final long serialVersionUID = 1L;
 
 	private final FirewallDelegate delegate;
 	private final Set<IpAddress<?>> allowedHostIps;
@@ -41,16 +44,16 @@ public final class FirewallDelegateFilter implements FirewallDelegate {
 		Objects.requireNonNull(allowedHostIps);
 		Objects.requireNonNull(allowedExternalSubnets);
 
-		this.allowedHostIps = allowedHostIps.stream()
+		this.allowedHostIps = Collections.unmodifiableSet(allowedHostIps.stream()
 				.filter(Objects::nonNull)
-				.collect(Collectors.toUnmodifiableSet());
-		this.allowedHostSubnets = allowedHostIps.stream()
-				.map(IpUtils::toIpNetAddress)
+				.collect(Collectors.toSet()));
+		this.allowedHostSubnets = Collections.unmodifiableSet(allowedHostIps.stream()
+				.map(IpNetworkUtils::convert2IpNetAddress)
 				.filter(Objects::nonNull)
-				.collect(Collectors.toUnmodifiableSet());
-		this.allowedExternalSubnets = allowedExternalSubnets.stream()
+				.collect(Collectors.toSet()));
+		this.allowedExternalSubnets = Collections.unmodifiableSet(allowedExternalSubnets.stream()
 				.filter(Objects::nonNull)
-				.collect(Collectors.toUnmodifiableSet());
+				.collect(Collectors.toSet()));
 	}
 
 	@Override

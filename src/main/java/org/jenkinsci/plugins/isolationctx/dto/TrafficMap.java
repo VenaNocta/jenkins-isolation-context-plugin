@@ -17,19 +17,17 @@ package org.jenkinsci.plugins.isolationctx.dto;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
 import java.util.Set;
 import hudson.Util;
-import jenkins.runeduniverse.utils.api.IpUtils;
+import jenkins.runeduniverse.utils.net.IpNetworkUtils;
 import net.runeduniverse.lib.utils.net.api.Ip4Address;
 import net.runeduniverse.lib.utils.net.api.Ip6Address;
 import net.runeduniverse.lib.utils.net.api.IpAddress;
@@ -85,36 +83,26 @@ public class TrafficMap implements Serializable {
 		this.data = new LinkedHashMap<>();
 	}
 
-	protected TrafficMap(final boolean forceSameIpType,
-			final Map<IpAddress<?>, Map<IpAddress<?>, Map<Protocol, Set<Integer>>>> data) {
-		this.forceSameIpType = forceSameIpType;
-		this.data = data;
-	}
-
-	// XStream2 hook -> handles marshal on save()
-	private Object writeReplace() {
-		return TrafficMapSnapshot.marshal(this);
-	}
-
 	public boolean isEmpty() {
 		return this.data.isEmpty();
 	}
 
-	public TrafficMap add(final IpAddress<?> ipA, IpAddress<?> ipB, Protocol protocol, Set<Integer> ports) {
+	public TrafficMap add(final IpAddress<?> ipA, final IpAddress<?> ipB, final Protocol protocol,
+			final Set<Integer> ports) {
 		final Map<Protocol, Set<Integer>> portMap = new LinkedHashMap<>();
 		portMap.put(protocol, ports);
 		add(ipA, ipB, portMap);
 		return this;
 	}
 
-	public TrafficMap add(final IpAddress<?> ipA, IpAddress<?> ipB, Map<Protocol, Set<Integer>> portMap) {
+	public TrafficMap add(final IpAddress<?> ipA, final IpAddress<?> ipB, final Map<Protocol, Set<Integer>> portMap) {
 		final Map<IpAddress<?>, Map<Protocol, Set<Integer>>> innerMap = new LinkedHashMap<>();
 		innerMap.put(ipB, portMap);
 		add(ipA, innerMap);
 		return this;
 	}
 
-	public TrafficMap add(final IpAddress<?> ipA, Map<IpAddress<?>, Map<Protocol, Set<Integer>>> innerMap) {
+	public TrafficMap add(final IpAddress<?> ipA, final Map<IpAddress<?>, Map<Protocol, Set<Integer>>> innerMap) {
 		final Map<IpAddress<?>, Map<IpAddress<?>, Map<Protocol, Set<Integer>>>> data = new LinkedHashMap<>();
 		data.put(ipA, innerMap);
 		add(data);
@@ -133,13 +121,13 @@ public class TrafficMap implements Serializable {
 			return this;
 		for (Entry<IpAddress<?>, Map<IpAddress<?>, Map<Protocol, Set<Integer>>>> dataEntry : dataMap.entrySet()) {
 			// inner map
-			final IpAddress<?> ipA = dataEntry.getKey();
+			final IpAddress<?> ipA = IpNetworkUtils.convert(dataEntry.getKey());
 			final Map<IpAddress<?>, Map<Protocol, Set<Integer>>> innerMap = dataEntry.getValue();
 			if (ipA == null || innerMap == null || innerMap.isEmpty())
 				continue;
 
 			for (Entry<IpAddress<?>, Map<Protocol, Set<Integer>>> innerEntry : innerMap.entrySet()) {
-				final IpAddress<?> ipB = innerEntry.getKey();
+				final IpAddress<?> ipB = IpNetworkUtils.convert(innerEntry.getKey());
 				final Map<Protocol, Set<Integer>> protoMap = innerEntry.getValue();
 				// protocol map
 				if (ipB == null || protoMap == null || protoMap.isEmpty())
@@ -217,9 +205,9 @@ public class TrafficMap implements Serializable {
 					if (protocol == null || ports == null || ports.isEmpty())
 						continue;
 
-					this.data.computeIfAbsent(ipA, k -> new LinkedHashMap<>())
-							.computeIfAbsent(ipB, k -> new LinkedHashMap<>())
-							.computeIfAbsent(protocol, k -> new LinkedHashSet<>())
+					this.data.getOrDefault(ipA, Collections.emptyMap())
+							.getOrDefault(ipB, Collections.emptyMap())
+							.getOrDefault(protocol, Collections.emptySet())
 							.removeAll(ports);
 				}
 			}
@@ -404,146 +392,5 @@ public class TrafficMap implements Serializable {
 	@FunctionalInterface
 	public static interface EntryConsumer<T> {
 		public void accept(T a, T b, Map<Protocol, Set<Integer>> protoMap) throws IOException, InterruptedException;
-	}
-
-	public static class TrafficMapSnapshot {
-		protected final boolean forceSameIpType;
-		// ipA : ipB : protocol : ports
-		protected final Map<String, Map<String, Map<String, Set<Integer>>>> data;
-
-		public TrafficMapSnapshot(final boolean forceSameIpType,
-				final Map<String, Map<String, Map<String, Set<Integer>>>> data) {
-			this.forceSameIpType = forceSameIpType;
-			this.data = data;
-		}
-
-		// XStream2 hook -> handles unmarshal on load()
-		private Object readResolve() {
-			return new TrafficMap(this.forceSameIpType, this.data.entrySet()
-					.stream()
-					.filter(Objects::nonNull)
-					.map(e -> new Entry<>(unmarshal(e.getKey()), e.getValue()))
-					.filter(Entry::nonNull)
-					.collect(Collectors.toMap(Entry::getKey, e0 -> //
-					// inner map
-					e0.getValue()
-							.entrySet()
-							.stream()
-							.filter(Objects::nonNull)
-							.map(e -> new Entry<>(unmarshal(e.getKey()), e.getValue()))
-							.filter(Entry::nonNull)
-							.collect(Collectors.toMap(Entry::getKey, e1 -> //
-							// proto map
-							e1.getValue()
-									.entrySet()
-									.stream()
-									.filter(Objects::nonNull)
-									.map(e -> new Entry<>(Protocol.fromString(e.getKey()), e.getValue()))
-									.filter(Entry::nonNull)
-									.collect(Collectors.toMap(Entry::getKey, Entry::getValue)))))));
-		}
-
-		public static IpAddress<?> unmarshal(String address) {
-			if ((address = Util.fixEmptyAndTrim(address)) == null)
-				return null;
-			final String[] arr = address.split("\\|");
-			if (arr.length != 2)
-				return null;
-			switch (arr[0]) {
-			case "v4":
-				return IpUtils.IP4_PARSER.apply(arr[1]);
-			case "v6":
-				return IpUtils.IP6_PARSER.apply(arr[1]);
-			}
-			return null;
-		}
-
-		public static TrafficMapSnapshot marshal(final TrafficMap map) {
-			return new TrafficMapSnapshot(map.forceSameIpType, map.data.entrySet()
-					.stream()
-					.filter(Objects::nonNull)
-					.map(e -> new Entry<>(marshal(e.getKey()), e.getValue()))
-					.filter(Entry::nonNull)
-					.collect(Collectors.toMap(Entry::getKey, e0 -> //
-					// inner map
-					e0.getValue()
-							.entrySet()
-							.stream()
-							.filter(Objects::nonNull)
-							.map(e -> new Entry<>(marshal(e.getKey()), e.getValue()))
-							.filter(Entry::nonNull)
-							.collect(Collectors.toMap(Entry::getKey, e1 -> //
-							// proto map
-							e1.getValue()
-									.entrySet()
-									.stream()
-									.filter(Objects::nonNull)
-									.map(e -> new Entry<>(Protocol.toString(e.getKey()), e.getValue()))
-									.filter(Entry::nonNull)
-									.collect(Collectors.toMap(Entry::getKey, Entry::getValue))))))
-
-			);
-		}
-
-		public static String marshal(final IpAddress<?> address) {
-			if (address == null)
-				return null;
-			if (address instanceof Ip4Address)
-				return "v4|" + address.toCidrNotation();
-			if (address instanceof Ip6Address)
-				return "v6|" + address.toCidrNotation();
-			return null;
-		}
-
-		protected static class Entry<K, V> {
-
-			protected K key;
-			protected V value;
-
-			public Entry(final K key, final V value) {
-				this.key = key;
-				this.value = value;
-			}
-
-			public K getKey() {
-				return this.key;
-			}
-
-			public V getValue() {
-				return this.value;
-			}
-
-			public K setKey(final K key) {
-				final K oldKey = this.key;
-				this.key = key;
-				return oldKey;
-			}
-
-			public V setValue(final V value) {
-				final V oldValue = this.value;
-				this.value = value;
-				return oldValue;
-			}
-
-			public boolean nonNullKey() {
-				return this.key != null;
-			}
-
-			public boolean nonNullValue() {
-				return this.value != null;
-			}
-
-			public boolean nonNull() {
-				return this.key != null && this.value != null;
-			}
-
-			public boolean nonNullOrEmptyKey() {
-				return !(this.key == null || this.key instanceof Collection<?> col && col.isEmpty());
-			}
-
-			public boolean nonNullOrEmptyValue() {
-				return !(this.value == null || this.value instanceof Collection<?> col && col.isEmpty());
-			}
-		}
 	}
 }

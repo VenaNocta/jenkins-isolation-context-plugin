@@ -16,13 +16,14 @@
 package org.jenkinsci.plugins.isolationctx;
 
 import java.io.IOException;
+import java.io.Serializable;
 
 import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
 
 import hudson.model.TaskListener;
 import net.runeduniverse.lib.utils.net.api.IpAddress;
 
-public interface FirewallDelegate {
+public interface FirewallDelegate extends Serializable {
 
 	public void firewallInputOpen(TrafficMap data, TaskListener listener) throws IOException, InterruptedException;
 
