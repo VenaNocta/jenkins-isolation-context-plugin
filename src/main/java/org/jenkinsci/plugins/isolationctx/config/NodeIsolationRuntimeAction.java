@@ -60,11 +60,11 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 	private static final long serialVersionUID = 1L;
 
 	@XStreamOmitField
-	protected final Object lock4 = new Object();
+	private transient Object lock4 = new Object();
 	@XStreamOmitField
-	protected final Object lock6 = new Object();
+	private transient Object lock6 = new Object();
 	@XStreamOmitField
-	protected final Object lockPorts = new Object();
+	private transient Object lockPorts = new Object();
 
 	protected transient Computer computer;
 	protected transient NodeIsolationHandler handler;
@@ -119,6 +119,14 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 						LinkedHashMap::new));
 		// Ports
 		this.openPorts = openPorts;
+	}
+
+	// XStream2 hook -> handles unmarshal on load()
+	private Object readResolve() {
+		this.lock4 = new Object();
+		this.lock6 = new Object();
+		this.lockPorts = new Object();
+		return this;
 	}
 
 	public NodeIsolationHandler isolationHandler() {
