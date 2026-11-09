@@ -26,7 +26,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.jenkinsci.plugins.isolationctx.IsolationContext;
 import org.jenkinsci.plugins.isolationctx.IsolationContextProvider;
 import org.jenkinsci.plugins.isolationctx.config.NodeIsolationProperty;
-import org.jenkinsci.plugins.isolationctx.config.NodeIsolationRuntimeAction;
+import org.jenkinsci.plugins.isolationctx.config.ComputerIsolationStateAction;
 import org.jenkinsci.plugins.isolationctx.ctx.LinuxNodeNamespaceContext;
 import org.jenkinsci.plugins.isolationctx.handler.LnxNodeIsolationHandler;
 import org.jenkinsci.plugins.isolationctx.handler.NodeIsolationHandler;
@@ -86,8 +86,8 @@ public class NodeIsolationCtxProvider implements IsolationContextProvider {
 				final StepContext context, final WorkspaceAction ws) throws IOException, InterruptedException {
 			final NodeIsolationHandler isolationHandler;
 			{
-				final NodeIsolationRuntimeAction isolationRuntime = NodeIsolationRuntimeAction.get(computer);
-				isolationHandler = isolationRuntime == null ? null : isolationRuntime.isolationHandler();
+				final ComputerIsolationStateAction computerState = ComputerIsolationStateAction.get(computer);
+				isolationHandler = computerState == null ? null : computerState.isolationHandler();
 			}
 
 			final Run<?, ?> run = context.get(Run.class);

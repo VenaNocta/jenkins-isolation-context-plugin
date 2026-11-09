@@ -27,7 +27,7 @@ import hudson.model.TaskListener;
 import net.runeduniverse.lib.utils.net.api.IpNet4Address;
 import net.runeduniverse.lib.utils.net.api.IpNet6Address;
 
-public interface NodeIsolationRuntime extends FirewallDelegate {
+public interface ComputerIsolationState extends FirewallDelegate {
 
 	public NodeIsolationHandler isolationHandler();
 

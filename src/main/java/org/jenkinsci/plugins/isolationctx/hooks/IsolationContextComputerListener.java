@@ -17,7 +17,7 @@ package org.jenkinsci.plugins.isolationctx.hooks;
 
 import java.io.IOException;
 import org.apache.commons.lang3.StringUtils;
-import org.jenkinsci.plugins.isolationctx.config.NodeIsolationRuntimeAction;
+import org.jenkinsci.plugins.isolationctx.config.ComputerIsolationStateAction;
 
 import hudson.EnvVars;
 import hudson.Extension;
@@ -38,20 +38,20 @@ public class IsolationContextComputerListener extends ComputerListener {
 		final EnvVars env = computer.getEnvironment();
 
 		try {
-			final NodeIsolationRuntimeAction runtime = NodeIsolationRuntimeAction.get(computer);
-			if (runtime == null)
+			final ComputerIsolationStateAction computerState = ComputerIsolationStateAction.get(computer);
+			if (computerState == null)
 				return;
 
-			runtime.setup(listener);
+			computerState.setup(listener);
 
 			String subnet = StringUtils.trimToNull(env.get(ENV_ISOLATION_SUBNET4));
 			if (subnet != null) {
-				runtime.setIpv4Subnet(subnet);
+				computerState.setIpv4Subnet(subnet);
 			}
 
 			subnet = StringUtils.trimToNull(env.get(ENV_ISOLATION_SUBNET6));
 			if (subnet != null) {
-				runtime.setIpv6Subnet(subnet);
+				computerState.setIpv6Subnet(subnet);
 			}
 		} catch (Exception e) {
 			listener.error("Failed to initialize IsolationContextHandler of Computer: " + computer.getDisplayName());

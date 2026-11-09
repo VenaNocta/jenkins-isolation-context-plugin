@@ -54,8 +54,8 @@ import net.runeduniverse.lib.utils.net.api.IpNet4Address;
 import net.runeduniverse.lib.utils.net.api.IpNet6Address;
 
 // stores data required for per Run Context Isolation on this Node!
-public class NodeIsolationRuntimeAction extends InvisibleAction
-		implements NodeIsolationRuntime, Saveable, Serializable {
+public class ComputerIsolationStateAction extends InvisibleAction
+		implements ComputerIsolationState, Saveable, Serializable {
 
 	private static final long serialVersionUID = 1L;
 
@@ -79,7 +79,7 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 	protected IpNet4Address subnet4;
 	protected IpNet6Address subnet6;
 
-	public NodeIsolationRuntimeAction(final Computer owner) {
+	public ComputerIsolationStateAction(final Computer owner) {
 		this(owner,
 				// Ipv4
 				IpNetworkUtils.createIpNet4Address(new byte[] { (byte) 0xac, 0x14, 0x00, 0x01 }, (short) 16),
@@ -90,7 +90,7 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 				new TrafficMap());
 	}
 
-	protected NodeIsolationRuntimeAction(final Computer computer, //
+	protected ComputerIsolationStateAction(final Computer computer, //
 			final IpNet4Address subnet4, final SortedSet<IpNet4Address> subnet4Stack,
 			final Map<IpNet4Address, String> subnet4Reservations, //
 			final IpNet6Address subnet6, final SortedSet<IpNet6Address> subnet6Stack,
@@ -303,25 +303,26 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 				.child("isolation-ctx.xml");
 	}
 
-	protected static void injectHandler(final NodeIsolationRuntimeAction action, final Computer computer)
+	protected static void injectHandler(final ComputerIsolationStateAction action, final Computer computer)
 			throws IOException, InterruptedException {
 		final NodeIsolationHandlerProvider provider = NodeIsolationHandlerProvider.providerFor(computer);
 		if (provider != null)
 			action.handler = provider.buildHandler(computer);
 	}
 
-	protected static NodeIsolationRuntimeAction load(final Computer computer) throws IOException, InterruptedException {
+	protected static ComputerIsolationStateAction load(final Computer computer)
+			throws IOException, InterruptedException {
 		final FilePath configFile = getConfigFile(computer.getNode());
 		if (!configFile.exists()) {
-			final NodeIsolationRuntimeAction action = new NodeIsolationRuntimeAction(computer);
+			final ComputerIsolationStateAction action = new ComputerIsolationStateAction(computer);
 			injectHandler(action, computer);
 			action.save();
 			return action;
 		}
 
-		final NodeIsolationRuntimeAction action;
+		final ComputerIsolationStateAction action;
 		try (InputStream stream = configFile.read()) {
-			action = (NodeIsolationRuntimeAction) Jenkins.XSTREAM2.fromXML(stream);
+			action = (ComputerIsolationStateAction) Jenkins.XSTREAM2.fromXML(stream);
 		}
 
 		action.computer = computer;
@@ -329,11 +330,11 @@ public class NodeIsolationRuntimeAction extends InvisibleAction
 		return action;
 	}
 
-	public synchronized static NodeIsolationRuntimeAction get(final Computer computer)
+	public synchronized static ComputerIsolationStateAction get(final Computer computer)
 			throws IOException, InterruptedException {
 		if (computer == null)
 			return null;
-		NodeIsolationRuntimeAction action = computer.getAction(NodeIsolationRuntimeAction.class);
+		ComputerIsolationStateAction action = computer.getAction(ComputerIsolationStateAction.class);
 		if (action == null)
 			computer.addAction(action = load(computer));
 		return action;

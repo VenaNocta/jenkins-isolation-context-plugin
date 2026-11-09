@@ -43,8 +43,8 @@ import java.util.stream.Collectors;
 
 import org.jenkinsci.plugins.isolationctx.IsolationContext;
 import org.jenkinsci.plugins.isolationctx.config.NodeIsolationProperty;
-import org.jenkinsci.plugins.isolationctx.config.NodeIsolationRuntime;
-import org.jenkinsci.plugins.isolationctx.config.NodeIsolationRuntimeAction;
+import org.jenkinsci.plugins.isolationctx.config.ComputerIsolationState;
+import org.jenkinsci.plugins.isolationctx.config.ComputerIsolationStateAction;
 import org.jenkinsci.plugins.isolationctx.ctx.net.LnxNetLink;
 import org.jenkinsci.plugins.isolationctx.dto.LinuxMountEntry;
 import org.jenkinsci.plugins.isolationctx.dto.LinuxIdentity;
@@ -132,8 +132,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 
 		this.ws = parent.getAction(WorkspaceAction.class);
 		this.computer = Jenkins.get()
-				.getNode(this.ws.getNode())
-				.toComputer();
+				.getComputer(this.ws.getNode());
 
 		final String flowNodeId = parent.getId();
 		try {
@@ -156,7 +155,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 		}
 
 		// getNodeRuntime2() requires this.node to be set
-		final NodeIsolationRuntime runtime = getNodeRuntime2();
+		final ComputerIsolationState runtime = getComputerState2();
 		if (runtime != null && runtime.isolationHandler() instanceof LnxNodeIsolationHandler handler) {
 			// reinit overlayData
 			if (this.overlayData != null)
@@ -199,13 +198,13 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 		}
 	}
 
-	protected NodeIsolationRuntime getNodeRuntime() throws IOException, InterruptedException {
-		return NodeIsolationRuntimeAction.get(this.computer);
+	protected ComputerIsolationState getComputerState() throws IOException, InterruptedException {
+		return ComputerIsolationStateAction.get(this.computer);
 	}
 
-	protected NodeIsolationRuntime getNodeRuntime2() {
+	protected ComputerIsolationState getComputerState2() {
 		try {
-			return getNodeRuntime();
+			return getComputerState();
 		} catch (IOException | InterruptedException ignored) {
 			ignored.printStackTrace();
 		}
@@ -216,7 +215,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 		if (this._logListener != null)
 			return _logListener;
 		try {
-			return _logListener = getNodeRuntime2().isolationHandler()
+			return _logListener = getComputerState2().isolationHandler()
 					.logTaskListener();
 		} catch (Throwable e) {
 			this._logListener = new LogTaskListener(LOGGER, Level.INFO);
@@ -227,8 +226,8 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 	}
 
 	protected OciRuntimeHandler ociHandler() throws IOException, InterruptedException {
-		final NodeIsolationRuntime nodeRuntime = getNodeRuntime();
-		if (nodeRuntime != null && nodeRuntime.isolationHandler() instanceof OciRuntimeHandler handler)
+		final ComputerIsolationState computerState = getComputerState();
+		if (computerState != null && computerState.isolationHandler() instanceof OciRuntimeHandler handler)
 			return handler;
 		return null;
 	}
@@ -394,8 +393,8 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 			e.printStackTrace(nodeLog);
 		} finally {
 			// Cleanup active LnxLinks
-			final NodeIsolationRuntime nodeRuntime = getNodeRuntime2();
-			if (nodeRuntime != null) {
+			final ComputerIsolationState computerState = getComputerState2();
+			if (computerState != null) {
 				for (LnxNetLink link : this._activeLinks.values()) {
 					try {
 						// Remove veth interfaces
@@ -404,7 +403,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 						e.printStackTrace(nodeLog);
 					}
 				}
-				if (nodeRuntime.isolationHandler() instanceof LnxNodeIsolationHandler handler) {
+				if (computerState.isolationHandler() instanceof LnxNodeIsolationHandler handler) {
 					try {
 						// just try it even if it wasn't created - maybe it was lost before!
 						final FilePath path = this.ws.getWorkspace();
@@ -468,8 +467,8 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 
 	@Override
 	public LnxNetLink connectNetLink() throws IOException, InterruptedException {
-		final NodeIsolationRuntime nodeRuntime = getNodeRuntime2();
-		if (nodeRuntime == null || this.processId == -1)
+		final ComputerIsolationState computerState = getComputerState2();
+		if (computerState == null || this.processId == -1)
 			return null;
 		final TaskListener nodeLog = logListener();
 
@@ -481,7 +480,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 
 			final Set<IpAddress<?>> hostIpSet = new LinkedHashSet<>();
 			final Set<IpNetAddress<?, ?>> subnetSet = new LinkedHashSet<>();
-			final IpNet4Address subnet4 = nodeRuntime.reserveIpv4Subnet(this.run, nodeLog);
+			final IpNet4Address subnet4 = computerState.reserveIpv4Subnet(this.run, nodeLog);
 			Ip4Address hostAddr4 = null, contextAddr4 = null;
 			if (subnet4 != null) {
 				hostAddr4 = subnet4.getLowestAddress()
@@ -492,7 +491,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 				subnetSet.add(subnet4);
 			}
 
-			final IpNet6Address subnet6 = nodeRuntime.reserveIpv6Subnet(this.run, nodeLog);
+			final IpNet6Address subnet6 = computerState.reserveIpv6Subnet(this.run, nodeLog);
 			Ip6Address hostAddr6 = null, contextAddr6 = null;
 			if (subnet6 != null) {
 				hostAddr6 = subnet6.getLowestAddress()
@@ -504,7 +503,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 			}
 
 			final LnxNetLink link = new LnxNetLink(//
-					new FirewallDelegateFilter(nodeRuntime, //
+					new FirewallDelegateFilter(computerState, //
 							Collections.unmodifiableSet(hostIpSet), //
 							Collections.unmodifiableSet(subnetSet)), //
 					hostIfaceName, contextIfaceName, //
@@ -554,7 +553,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 				cmd.addAll(Arrays.asList("ip", "link", "set", contextIfaceName, "up"));
 				wsExecAndJoinCmd(cmd, true);
 
-				if (nodeRuntime.isolationHandler() instanceof LnxNodeIsolationHandler handler) {
+				if (computerState.isolationHandler() instanceof LnxNodeIsolationHandler handler) {
 					handler.networkHostInterfaceAdd(Set.of(hostIfaceName), nodeLog);
 				}
 			} catch (InterruptedException | IOException e) {
@@ -575,7 +574,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 		if (!(anyLink instanceof LnxNetLink))
 			return;
 		final LnxNetLink link = (LnxNetLink) anyLink;
-		final NodeIsolationRuntime nodeRuntime = getNodeRuntime2();
+		final ComputerIsolationState computerState = getComputerState2();
 
 		final TaskListener nodeLog = logListener();
 
@@ -586,12 +585,12 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 			try {
 				wsExecAndJoinCmd(Arrays.asList("sudo", "ip", "link", "del", link.getHostIfaceName()), true);
 
-				if (nodeRuntime != null) {
-					nodeRuntime.freeIpv4Subnet(link.getSubnetV4(), nodeLog);
-					nodeRuntime.freeIpv6Subnet(link.getSubnetV6(), nodeLog);
+				if (computerState != null) {
+					computerState.freeIpv4Subnet(link.getSubnetV4(), nodeLog);
+					computerState.freeIpv6Subnet(link.getSubnetV6(), nodeLog);
 				}
 			} finally {
-				if (nodeRuntime.isolationHandler() instanceof LnxNodeIsolationHandler handler) {
+				if (computerState.isolationHandler() instanceof LnxNodeIsolationHandler handler) {
 					handler.networkHostInterfaceRemove(Set.of(link.getHostIfaceName()), nodeLog);
 				}
 			}
