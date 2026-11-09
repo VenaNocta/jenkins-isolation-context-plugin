@@ -28,7 +28,7 @@ import hudson.FilePath;
 import hudson.LauncherDecorator;
 import hudson.remoting.Future;
 
-public class NoOpIsolationContext implements IsolationContext {
+public class UnisolatedContext implements IsolationContext {
 
 	private static final long serialVersionUID = 1L;
 

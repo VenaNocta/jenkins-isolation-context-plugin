@@ -17,15 +17,15 @@ package org.jenkinsci.plugins.isolationctx.provider;
 
 import java.io.IOException;
 
-import org.jenkinsci.plugins.isolationctx.handler.LnxNodeIsolationHandler;
-import org.jenkinsci.plugins.isolationctx.handler.NodeIsolationHandler;
+import org.jenkinsci.plugins.isolationctx.handler.ScriptedLnxIsolationHandler;
+import org.jenkinsci.plugins.isolationctx.handler.ComputerIsolationHandler;
 import org.jenkinsci.plugins.isolationctx.handler.NodeIsolationHandlerProvider;
 
 import hudson.Extension;
 import hudson.model.Computer;
 
 @Extension
-public class LnxNodeIsolationHandlerProvider implements NodeIsolationHandlerProvider {
+public class ScriptedLnxIsolationHandlerProvider implements NodeIsolationHandlerProvider {
 
 	@Override
 	public boolean isApplicable(final Computer computer) {
@@ -46,7 +46,7 @@ public class LnxNodeIsolationHandlerProvider implements NodeIsolationHandlerProv
 	}
 
 	@Override
-	public NodeIsolationHandler buildHandler(final Computer computer) throws IOException, InterruptedException {
-		return new LnxNodeIsolationHandler(computer);
+	public ComputerIsolationHandler buildHandler(final Computer computer) throws IOException, InterruptedException {
+		return new ScriptedLnxIsolationHandler(computer);
 	}
 }

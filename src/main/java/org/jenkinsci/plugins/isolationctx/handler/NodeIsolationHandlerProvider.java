@@ -25,7 +25,7 @@ public interface NodeIsolationHandlerProvider extends ExtensionPoint {
 
 	public boolean isApplicable(Computer computer);
 
-	public NodeIsolationHandler buildHandler(Computer computer) throws IOException, InterruptedException;
+	public ComputerIsolationHandler buildHandler(Computer computer) throws IOException, InterruptedException;
 
 	public static ExtensionList<NodeIsolationHandlerProvider> all() {
 		return ExtensionList.lookup(NodeIsolationHandlerProvider.class);

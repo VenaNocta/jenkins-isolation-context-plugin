@@ -27,9 +27,9 @@ import org.jenkinsci.plugins.isolationctx.IsolationContext;
 import org.jenkinsci.plugins.isolationctx.IsolationContextProvider;
 import org.jenkinsci.plugins.isolationctx.config.NodeIsolationProperty;
 import org.jenkinsci.plugins.isolationctx.config.ComputerIsolationStateAction;
-import org.jenkinsci.plugins.isolationctx.ctx.LinuxNodeNamespaceContext;
-import org.jenkinsci.plugins.isolationctx.handler.LnxNodeIsolationHandler;
-import org.jenkinsci.plugins.isolationctx.handler.NodeIsolationHandler;
+import org.jenkinsci.plugins.isolationctx.ctx.LinuxNamespaceContext;
+import org.jenkinsci.plugins.isolationctx.handler.ScriptedLnxIsolationHandler;
+import org.jenkinsci.plugins.isolationctx.handler.ComputerIsolationHandler;
 import org.jenkinsci.plugins.isolationctx.hooks.IsolationContextRunListener;
 import org.jenkinsci.plugins.variant.OptionalExtension;
 
@@ -84,7 +84,7 @@ public class NodeIsolationCtxProvider implements IsolationContextProvider {
 
 		protected IsolationContext selectIsolationContext(final FlowNode flowNode, final Computer computer,
 				final StepContext context, final WorkspaceAction ws) throws IOException, InterruptedException {
-			final NodeIsolationHandler isolationHandler;
+			final ComputerIsolationHandler isolationHandler;
 			{
 				final ComputerIsolationStateAction computerState = ComputerIsolationStateAction.get(computer);
 				isolationHandler = computerState == null ? null : computerState.isolationHandler();
@@ -98,8 +98,8 @@ public class NodeIsolationCtxProvider implements IsolationContextProvider {
 				return null;
 			}
 
-			if (isolationHandler instanceof LnxNodeIsolationHandler) {
-				return new LinuxNodeNamespaceContext(run, computer, ws, listener);
+			if (isolationHandler instanceof ScriptedLnxIsolationHandler) {
+				return new LinuxNamespaceContext(run, computer, ws, listener);
 			}
 			return null;
 		}

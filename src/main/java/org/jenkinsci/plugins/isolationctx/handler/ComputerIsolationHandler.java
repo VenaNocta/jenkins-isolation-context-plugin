@@ -20,7 +20,7 @@ import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
 
 import hudson.model.TaskListener;
 
-public interface NodeIsolationHandler {
+public interface ComputerIsolationHandler {
 
 	public boolean isActive();
 

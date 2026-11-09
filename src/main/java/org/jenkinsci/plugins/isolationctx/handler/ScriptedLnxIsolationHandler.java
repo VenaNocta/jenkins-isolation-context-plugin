@@ -33,7 +33,7 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import org.jenkinsci.plugins.isolationctx.Scripts;
-import org.jenkinsci.plugins.isolationctx.ctx.LinuxNodeNamespaceContext;
+import org.jenkinsci.plugins.isolationctx.ctx.LinuxNamespaceContext;
 import org.jenkinsci.plugins.isolationctx.dto.LinuxMountEntry;
 import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
@@ -47,9 +47,9 @@ import hudson.util.LogTaskListener;
 import hudson.util.StreamTaskListener;
 import jenkins.util.io.OnMaster;
 
-public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, OciRuntimeHandler {
+public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, OnMaster, OciRuntimeHandler {
 
-	private static final Logger LOGGER = Logger.getLogger(LinuxNodeNamespaceContext.class.getName());
+	private static final Logger LOGGER = Logger.getLogger(LinuxNamespaceContext.class.getName());
 
 	protected final AtomicBoolean active = new AtomicBoolean(false);
 
@@ -71,7 +71,7 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 	@CheckForNull
 	protected TaskListener logListener;
 
-	public LnxNodeIsolationHandler(@NonNull final Computer computer) throws IOException, InterruptedException {
+	public ScriptedLnxIsolationHandler(@NonNull final Computer computer) throws IOException, InterruptedException {
 		// NOTE: never persist Node
 		// -> it's a DTO and is updated on every Computer reconnect!
 		Objects.requireNonNull(this.computer = computer);
@@ -361,16 +361,16 @@ public class LnxNodeIsolationHandler implements NodeIsolationHandler, OnMaster, 
 		protected final String rootPath;
 		protected String relWorkspacePath = "";
 
-		protected transient LnxNodeIsolationHandler handler;
+		protected transient ScriptedLnxIsolationHandler handler;
 
-		protected OverlayMountData(final LnxNodeIsolationHandler handler, final FilePath overlayBasePath) {
+		protected OverlayMountData(final ScriptedLnxIsolationHandler handler, final FilePath overlayBasePath) {
 			this.handler = handler;
 			this.basePath = overlayBasePath.getRemote();
 			this.rootPath = overlayBasePath.child("rootfs")
 					.getRemote();
 		}
 
-		public void initHandler(final LnxNodeIsolationHandler handler) {
+		public void initHandler(final ScriptedLnxIsolationHandler handler) {
 			this.handler = handler;
 		}
 

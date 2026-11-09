@@ -32,7 +32,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
-import org.jenkinsci.plugins.isolationctx.handler.NodeIsolationHandler;
+import org.jenkinsci.plugins.isolationctx.handler.ComputerIsolationHandler;
 import org.jenkinsci.plugins.isolationctx.handler.NodeIsolationHandlerProvider;
 
 import com.thoughtworks.xstream.annotations.XStreamOmitField;
@@ -67,7 +67,7 @@ public class ComputerIsolationStateAction extends InvisibleAction
 	private transient Object lockPorts = new Object();
 
 	protected transient Computer computer;
-	protected transient NodeIsolationHandler handler;
+	protected transient ComputerIsolationHandler handler;
 
 	protected final SortedSet<IpNet4Address> subnet4Stack;
 	protected final Map<IpNet4Address, String> subnet4Reservations;
@@ -129,7 +129,7 @@ public class ComputerIsolationStateAction extends InvisibleAction
 		return this;
 	}
 
-	public NodeIsolationHandler isolationHandler() {
+	public ComputerIsolationHandler isolationHandler() {
 		return this.handler;
 	}
 

@@ -48,8 +48,8 @@ import org.jenkinsci.plugins.isolationctx.config.ComputerIsolationStateAction;
 import org.jenkinsci.plugins.isolationctx.ctx.net.LnxNetLink;
 import org.jenkinsci.plugins.isolationctx.dto.LinuxMountEntry;
 import org.jenkinsci.plugins.isolationctx.dto.LinuxIdentity;
-import org.jenkinsci.plugins.isolationctx.handler.LnxNodeIsolationHandler;
-import org.jenkinsci.plugins.isolationctx.handler.LnxNodeIsolationHandler.OverlayMountData;
+import org.jenkinsci.plugins.isolationctx.handler.ScriptedLnxIsolationHandler;
+import org.jenkinsci.plugins.isolationctx.handler.ScriptedLnxIsolationHandler.OverlayMountData;
 import org.jenkinsci.plugins.isolationctx.util.WorkspaceLauncherUtil;
 import org.jenkinsci.plugins.isolationctx.handler.OciRuntimeHandler;
 import org.jenkinsci.plugins.workflow.actions.WorkspaceAction;
@@ -87,10 +87,10 @@ import net.runeduniverse.lib.utils.net.api.IpNet4Address;
 import net.runeduniverse.lib.utils.net.api.IpNet6Address;
 import net.runeduniverse.lib.utils.net.api.IpNetAddress;
 
-public class LinuxNodeNamespaceContext implements IsolationContext {
+public class LinuxNamespaceContext implements IsolationContext {
 
 	private static final long serialVersionUID = 1L;
-	private static final Logger LOGGER = Logger.getLogger(LinuxNodeNamespaceContext.class.getName());
+	private static final Logger LOGGER = Logger.getLogger(LinuxNamespaceContext.class.getName());
 
 	public static final String TEMPL_LINE = "[ Linux-Namespace » %d ] %s";
 
@@ -113,7 +113,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 	protected transient CompletableFuture<LinuxIdentity> _lnxIdentityFuture = null;
 	protected transient TaskListener _logListener = null;
 
-	public LinuxNodeNamespaceContext(final Run<?, ?> run, final Computer computer, final WorkspaceAction ws,
+	public LinuxNamespaceContext(final Run<?, ?> run, final Computer computer, final WorkspaceAction ws,
 			final TaskListener listener) {
 		this.factory = new DecoratorFactory(this);
 		this.run = run;
@@ -128,7 +128,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 
 	@Override
 	public void onLoad(final FlowNode parent) {
-		Objects.requireNonNull(parent, "LinuxNodeNamespaceContext can not be loaded with FlowNode: null");
+		Objects.requireNonNull(parent, "LinuxNamespaceContext can not be loaded with FlowNode: null");
 
 		this.ws = parent.getAction(WorkspaceAction.class);
 		this.computer = Jenkins.get()
@@ -143,8 +143,8 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 							.getId();
 
 					if (flowNodeId.equals(id)) {
-						LinuxNodeNamespaceContext.this.run = stepContext.get(Run.class);
-						LinuxNodeNamespaceContext.this.listener = stepContext.get(TaskListener.class);
+						LinuxNamespaceContext.this.run = stepContext.get(Run.class);
+						LinuxNamespaceContext.this.listener = stepContext.get(TaskListener.class);
 					}
 				} catch (Exception ignore) {
 				}
@@ -156,7 +156,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 
 		// getNodeRuntime2() requires this.node to be set
 		final ComputerIsolationState runtime = getComputerState2();
-		if (runtime != null && runtime.isolationHandler() instanceof LnxNodeIsolationHandler handler) {
+		if (runtime != null && runtime.isolationHandler() instanceof ScriptedLnxIsolationHandler handler) {
 			// reinit overlayData
 			if (this.overlayData != null)
 				this.overlayData.initHandler(handler);
@@ -242,7 +242,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 		// sudo nsenter --target=75008 --mount --uts --ipc --net --pid --
 		cmd.add("sudo");
 		cmd.add("nsenter");
-		cmd.add("--target=" + LinuxNodeNamespaceContext.this.processId);
+		cmd.add("--target=" + LinuxNamespaceContext.this.processId);
 		cmd.add("--mount");
 		cmd.add("--uts");
 		cmd.add("--ipc");
@@ -328,7 +328,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 							.addBindMount(tmpPathRemote, tmpPathRemote, "bind", "rw", "rshared")
 							.addBindMount(envCachePathRemote, envCachePathRemote, "bind", "rw", "rshared");
 
-			if (ociHandler instanceof LnxNodeIsolationHandler handler) {
+			if (ociHandler instanceof ScriptedLnxIsolationHandler handler) {
 				final OverlayMountData mountData = handler.overlayCreate(workspacePath.withSuffix("@overlay"));
 				ociConfigBuilder.setRootFs("rootfs");
 				ociBundlePath = mountData.basePath();
@@ -403,7 +403,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 						e.printStackTrace(nodeLog);
 					}
 				}
-				if (computerState.isolationHandler() instanceof LnxNodeIsolationHandler handler) {
+				if (computerState.isolationHandler() instanceof ScriptedLnxIsolationHandler handler) {
 					try {
 						// just try it even if it wasn't created - maybe it was lost before!
 						final FilePath path = this.ws.getWorkspace();
@@ -553,7 +553,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 				cmd.addAll(Arrays.asList("ip", "link", "set", contextIfaceName, "up"));
 				wsExecAndJoinCmd(cmd, true);
 
-				if (computerState.isolationHandler() instanceof LnxNodeIsolationHandler handler) {
+				if (computerState.isolationHandler() instanceof ScriptedLnxIsolationHandler handler) {
 					handler.networkHostInterfaceAdd(Set.of(hostIfaceName), nodeLog);
 				}
 			} catch (InterruptedException | IOException e) {
@@ -590,7 +590,7 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 					computerState.freeIpv6Subnet(link.getSubnetV6(), nodeLog);
 				}
 			} finally {
-				if (computerState.isolationHandler() instanceof LnxNodeIsolationHandler handler) {
+				if (computerState.isolationHandler() instanceof ScriptedLnxIsolationHandler handler) {
 					handler.networkHostInterfaceRemove(Set.of(link.getHostIfaceName()), nodeLog);
 				}
 			}
@@ -624,9 +624,9 @@ public class LinuxNodeNamespaceContext implements IsolationContext {
 
 		private static final long serialVersionUID = 1L;
 
-		private final LinuxNodeNamespaceContext ctx;
+		private final LinuxNamespaceContext ctx;
 
-		protected DecoratorFactory(final LinuxNodeNamespaceContext lnxContext) {
+		protected DecoratorFactory(final LinuxNamespaceContext lnxContext) {
 			this.ctx = lnxContext;
 		}
 
