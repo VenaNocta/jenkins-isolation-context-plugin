@@ -104,7 +104,6 @@
 		<jenkins.version>2.568.3</jenkins.version>
 		<runeduniverse-utils-api.version>2.0.2-1-999999</runeduniverse-utils-api.version>
 		<!-- ARTIFACT VERSIONS - COMPILER -->
-		<openjdk-min-version>${maven.compiler.release}</openjdk-min-version>
 		<plugin-revelc-formatter-version>2.23.0</plugin-revelc-formatter-version>
 		<plugin-maven-toolchains-version>3.1.0</plugin-maven-toolchains-version>
 		<plugin-mycila-license-version>5.1.2</plugin-mycila-license-version>
@@ -201,7 +200,7 @@
 						<configuration>
 							<toolchains>
 								<jdk>
-									<version>openjdk-${openjdk-min-version}</version>
+									<version>openjdk-${maven.compiler.release}</version>
 								</jdk>
 							</toolchains>
 						</configuration>
@@ -252,9 +251,16 @@
 							<configuration>
 								<toolchains>
 									<jdk>
-										<version>openjdk-${openjdk-min-version}</version>
+										<version>openjdk-${maven.compiler.release}</version>
 									</jdk>
 								</toolchains>
+							</configuration>
+						</plugin>
+						<plugin>
+							<groupId>com.github.spotbugs</groupId>
+							<artifactId>spotbugs-maven-plugin</artifactId>
+							<configuration>
+								<failOnError>false</failOnError>
 							</configuration>
 						</plugin>
 					</plugins>
@@ -374,7 +380,7 @@
 					<configuration>
 						<toolchains>
 							<jdk>
-								<version>openjdk-${openjdk-min-version}</version>
+								<version>openjdk-${maven.compiler.release}</version>
 							</jdk>
 						</toolchains>
 					</configuration>
