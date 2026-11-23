@@ -29,8 +29,11 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Predicate;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
+import org.jenkinsci.plugins.isolationctx.LinuxNamespaceContext;
 import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
 import org.jenkinsci.plugins.isolationctx.handler.ComputerIsolationHandler;
 import org.jenkinsci.plugins.isolationctx.provider.NodeIsolationHandlerProvider;
@@ -46,6 +49,7 @@ import hudson.model.Saveable;
 import hudson.model.TaskListener;
 import hudson.remoting.Channel;
 import hudson.remoting.VirtualChannel;
+import hudson.util.LogTaskListener;
 import jenkins.model.Jenkins;
 import jenkins.runeduniverse.utils.net.IpNetworkUtils;
 import jenkins.runeduniverse.utils.net.XStreamIpNet4Address;
@@ -332,14 +336,19 @@ public class ComputerIsolationStateAction extends InvisibleAction
 		}
 		if (newHandler == null) {
 			// handler disabled
-			action.handler.shutdown(channel, action.handler.logTaskListener());
+			try (final LogTaskListener listener = new LogTaskListener(Logger.getLogger(action.handler.getClass()
+					.getName()), Level.INFO)) {
+				// we require a new listener as the logTaskListener() of the old handler,
+				// has a closed channel!
+				action.handler.shutdown(channel, listener);
+			}
 			action.handler = null;
 			return;
 		}
 		final ComputerIsolationHandler oldHandler = action.handler;
 		if (oldHandler.getClass() != newHandler.getClass()) {
 			// new handler, Node must have been reconfigured!
-			oldHandler.shutdown(channel, oldHandler.logTaskListener());
+			oldHandler.shutdown(channel, newHandler.logTaskListener());
 		}
 		// still the same handler, probably a reconnect - no reason to shutdown
 		action.handler = newHandler;

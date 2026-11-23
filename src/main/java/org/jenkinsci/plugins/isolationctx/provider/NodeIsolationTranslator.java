@@ -51,7 +51,7 @@ public class NodeIsolationTranslator extends DynamicContext.Typed<LauncherDecora
 		final FlowNode flowNode = context.get(FlowNode.class);
 		// define fallback result
 		LauncherDecorator fallbackResult = null;
-		if (NodeIsolationProperty.isDisabled(node)) {
+		if (!NodeIsolationProperty.isDisabled(node)) {
 			fallbackResult = new AbortingLauncherDecorator(ERR_REQUIRED_ISOLATION);
 		}
 		// apply overrides if available

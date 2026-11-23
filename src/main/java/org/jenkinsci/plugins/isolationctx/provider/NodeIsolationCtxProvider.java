@@ -26,6 +26,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.jenkinsci.plugins.isolationctx.config.NodeIsolationProperty;
 import org.jenkinsci.plugins.isolationctx.dto.IsolationContextAction;
 import org.jenkinsci.plugins.isolationctx.IsolationContext;
+import org.jenkinsci.plugins.isolationctx.UnsupportedContext;
 import org.jenkinsci.plugins.isolationctx.config.ComputerIsolationStateAction;
 import org.jenkinsci.plugins.isolationctx.handler.ComputerIsolationHandler;
 import org.jenkinsci.plugins.isolationctx.hooks.IsolationContextRunListener;
@@ -73,7 +74,10 @@ public class NodeIsolationCtxProvider implements IsolationContextProvider {
 			final Run<?, ?> run = (this._context == null ? //
 					IsolationContextBuilder.findContext(flowNode) : this._context).get(Run.class);
 			// bypass context isolation if allowed
-			if (!IsolationContextRunListener.isIsolationForced(run) && NodeIsolationProperty.isDisabled(node)) {
+			if (NodeIsolationProperty.isDisabled(node) && !IsolationContextRunListener.isIsolationForced(run)) {
+				this._context.get(TaskListener.class)
+						.getLogger()
+						.println("INFO: Context Isolation is disabled");
 				return null;
 			}
 
@@ -91,10 +95,18 @@ public class NodeIsolationCtxProvider implements IsolationContextProvider {
 			final Run<?, ?> run = context.get(Run.class);
 			final TaskListener listener = context.get(TaskListener.class);
 
-			if (isolationHandler == null || isolationHandler.isActive() == false) {
-				listener.error("Context Isolation currently not available on this Node!");
+			if (isolationHandler == null) {
+				// when the handler is null it usually means isolation is disabled on the Node
+				listener.getLogger()
+						.println("INFO: Context Isolation is not available");
 				final IsolationContextAction action = run.getAction(IsolationContextAction.class);
 				return action == null ? null : action.getContext();
+			}
+
+			if (isolationHandler.isActive() == false) {
+				// when a handler is not active, something during the setup must have failed!
+				listener.error("Context Isolation is currently unavailable, on this Node!");
+				return new UnsupportedContext();
 			}
 			return isolationHandler.createIsolationContext(run, flowNode, computer, listener);
 		}

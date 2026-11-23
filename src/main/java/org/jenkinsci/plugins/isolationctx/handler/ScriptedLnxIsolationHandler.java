@@ -135,7 +135,7 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 	}
 
 	protected final FilePath logPath() {
-		return new FilePath(this.computer.getChannel(), this._logPath);
+		return new FilePath(this.channel, this._logPath);
 	}
 
 	protected final FilePath rootPath() {
