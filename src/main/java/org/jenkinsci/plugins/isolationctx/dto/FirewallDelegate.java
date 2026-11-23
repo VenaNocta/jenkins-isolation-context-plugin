@@ -13,12 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jenkinsci.plugins.isolationctx;
+package org.jenkinsci.plugins.isolationctx.dto;
 
 import java.io.IOException;
 import java.io.Serializable;
-
-import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
 
 import hudson.model.TaskListener;
 import net.runeduniverse.lib.utils.net.api.IpAddress;

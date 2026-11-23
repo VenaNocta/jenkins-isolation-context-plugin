@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jenkinsci.plugins.isolationctx;
+package org.jenkinsci.plugins.isolationctx.utils;
 
 import org.jenkinsci.plugins.workflow.graph.BlockStartNode;
 import org.jenkinsci.plugins.workflow.graph.FlowNode;
@@ -22,9 +22,9 @@ import hudson.model.Action;
 import hudson.model.Run;
 
 // class requires org.jenkinsci.plugins.workflow.graph package
-public class WorkflowUtils {
+public class WorkflowUtil {
 
-	private WorkflowUtils() {
+	private WorkflowUtil() {
 	}
 
 	public static <T extends Action> T findContextAction(final Class<T> type, final FlowNode flowNode) {

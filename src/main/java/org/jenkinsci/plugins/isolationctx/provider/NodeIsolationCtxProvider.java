@@ -23,12 +23,10 @@ import org.jenkinsci.plugins.workflow.support.steps.ExecutorStep;
 
 import java.io.IOException;
 import org.apache.commons.lang3.StringUtils;
-import org.jenkinsci.plugins.isolationctx.IsolationContext;
-import org.jenkinsci.plugins.isolationctx.IsolationContextProvider;
 import org.jenkinsci.plugins.isolationctx.config.NodeIsolationProperty;
+import org.jenkinsci.plugins.isolationctx.dto.IsolationContextAction;
+import org.jenkinsci.plugins.isolationctx.IsolationContext;
 import org.jenkinsci.plugins.isolationctx.config.ComputerIsolationStateAction;
-import org.jenkinsci.plugins.isolationctx.ctx.LinuxNamespaceContext;
-import org.jenkinsci.plugins.isolationctx.handler.ScriptedLnxIsolationHandler;
 import org.jenkinsci.plugins.isolationctx.handler.ComputerIsolationHandler;
 import org.jenkinsci.plugins.isolationctx.hooks.IsolationContextRunListener;
 import org.jenkinsci.plugins.variant.OptionalExtension;
@@ -39,7 +37,7 @@ import hudson.model.Run;
 import hudson.model.TaskListener;
 import jenkins.model.Jenkins;
 
-@OptionalExtension(requireClasses = ExecutorStep.class)
+@OptionalExtension(requireClasses = { ExecutorStep.class })
 public class NodeIsolationCtxProvider implements IsolationContextProvider {
 
 	@Override
@@ -79,11 +77,11 @@ public class NodeIsolationCtxProvider implements IsolationContextProvider {
 				return null;
 			}
 
-			return selectIsolationContext(flowNode, node.toComputer(), this._context, ws);
+			return selectIsolationContext(flowNode, node.toComputer(), this._context);
 		}
 
 		protected IsolationContext selectIsolationContext(final FlowNode flowNode, final Computer computer,
-				final StepContext context, final WorkspaceAction ws) throws IOException, InterruptedException {
+				final StepContext context) throws IOException, InterruptedException {
 			final ComputerIsolationHandler isolationHandler;
 			{
 				final ComputerIsolationStateAction computerState = ComputerIsolationStateAction.get(computer);
@@ -95,13 +93,10 @@ public class NodeIsolationCtxProvider implements IsolationContextProvider {
 
 			if (isolationHandler == null || isolationHandler.isActive() == false) {
 				listener.error("Context Isolation currently not available on this Node!");
-				return null;
+				final IsolationContextAction action = run.getAction(IsolationContextAction.class);
+				return action == null ? null : action.getContext();
 			}
-
-			if (isolationHandler instanceof ScriptedLnxIsolationHandler) {
-				return new LinuxNamespaceContext(run, computer, ws, listener);
-			}
-			return null;
+			return isolationHandler.createIsolationContext(run, flowNode, computer, listener);
 		}
 	}
 }

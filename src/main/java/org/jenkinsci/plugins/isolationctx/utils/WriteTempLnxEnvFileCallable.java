@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jenkinsci.plugins.isolationctx.ctx;
+package org.jenkinsci.plugins.isolationctx.utils;
 
 import java.io.File;
 import java.io.IOException;
@@ -25,14 +25,14 @@ import com.google.common.io.Files;
 import hudson.remoting.VirtualChannel;
 import jenkins.MasterToSlaveFileCallable;
 
-public class WriteTempEnvFileCallable extends MasterToSlaveFileCallable<String> {
+public class WriteTempLnxEnvFileCallable extends MasterToSlaveFileCallable<String> {
 
 	private static final long serialVersionUID = 1L;
 
 	protected final Map<String, String> env;
 	protected final boolean exportVariables;
 
-	public WriteTempEnvFileCallable(final Map<String, String> env, final boolean exportVariables) {
+	public WriteTempLnxEnvFileCallable(final Map<String, String> env, final boolean exportVariables) {
 		this.env = env;
 		this.exportVariables = exportVariables;
 	}

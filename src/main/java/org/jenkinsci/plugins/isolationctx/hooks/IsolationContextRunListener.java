@@ -18,8 +18,8 @@ package org.jenkinsci.plugins.isolationctx.hooks;
 import java.io.IOException;
 
 import org.jenkinsci.plugins.isolationctx.IsolationContext;
+import org.jenkinsci.plugins.isolationctx.UnsupportedContext;
 import org.jenkinsci.plugins.isolationctx.config.JobIsolationProperty;
-import org.jenkinsci.plugins.isolationctx.ctx.UnsupportedContext;
 import org.jenkinsci.plugins.isolationctx.dto.IsolationContextAction;
 
 import hudson.Extension;

@@ -16,6 +16,7 @@
 package org.jenkinsci.plugins.isolationctx.hooks;
 
 import java.io.IOException;
+
 import org.jenkinsci.plugins.isolationctx.IsolationContext;
 import org.jenkinsci.plugins.isolationctx.dto.IsolationContextAction;
 import org.jenkinsci.plugins.workflow.flow.GraphListener;

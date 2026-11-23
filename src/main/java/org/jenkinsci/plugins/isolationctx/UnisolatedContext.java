@@ -13,14 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jenkinsci.plugins.isolationctx.ctx;
+package org.jenkinsci.plugins.isolationctx;
 
 import java.io.IOException;
-import java.net.UnixDomainSocketAddress;
-
-import org.apache.commons.lang3.NotImplementedException;
-import org.jenkinsci.plugins.isolationctx.IsolationContext;
-import org.jenkinsci.plugins.isolationctx.ctx.net.DefaultNetLink;
+import org.jenkinsci.plugins.isolationctx.dto.net.DefaultNetInterface;
+import org.jenkinsci.plugins.isolationctx.dto.net.NetInterface;
 import org.jenkinsci.plugins.workflow.graph.FlowNode;
 
 import hudson.FilePath.FileCallable;
@@ -31,6 +28,9 @@ import hudson.remoting.Future;
 public class UnisolatedContext implements IsolationContext {
 
 	private static final long serialVersionUID = 1L;
+
+	public UnisolatedContext() {
+	}
 
 	@Override
 	public void onLoad(final FlowNode parent) {
@@ -66,12 +66,6 @@ public class UnisolatedContext implements IsolationContext {
 	}
 
 	@Override
-	public UnixDomainSocketAddress connectUnixSocket(final String path) {
-		// TODO provide localhost Socket
-		throw new NotImplementedException();
-	}
-
-	@Override
 	public boolean mountWorkspacePath(final FilePath workspacePath) throws IOException, InterruptedException {
 		return true;
 	}
@@ -82,11 +76,11 @@ public class UnisolatedContext implements IsolationContext {
 	}
 
 	@Override
-	public NetLink connectNetLink() {
-		return DefaultNetLink.createLoopback(null, true, true);
+	public NetInterface connectNetInterface() {
+		return DefaultNetInterface.createLoopback(null, true, true);
 	}
 
 	@Override
-	public void disconnectNetLink(final NetLink link) {
+	public void disconnectNetInterface(NetInterface iface) throws IOException, InterruptedException {
 	}
 }

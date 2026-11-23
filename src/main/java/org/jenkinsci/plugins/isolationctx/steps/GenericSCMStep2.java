@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import org.jenkinsci.plugins.isolationctx.config.JobIsolationProperty;
-import org.jenkinsci.plugins.isolationctx.ctx.DecoratedIsolationLauncher;
+import org.jenkinsci.plugins.isolationctx.launcher.DecoratedIsolationLauncher;
 import org.jenkinsci.plugins.workflow.steps.StepContext;
 import org.jenkinsci.plugins.workflow.steps.StepExecution;
 import org.jenkinsci.plugins.workflow.steps.SynchronousNonBlockingStepExecution;

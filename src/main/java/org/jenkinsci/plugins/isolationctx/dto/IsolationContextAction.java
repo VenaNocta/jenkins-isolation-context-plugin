@@ -22,11 +22,13 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 
 import org.jenkinsci.plugins.isolationctx.IsolationContext;
-import org.jenkinsci.plugins.isolationctx.IsolationContextProvider.IsolationContextBuilder;
+import org.jenkinsci.plugins.isolationctx.provider.IsolationContextProvider.IsolationContextBuilder;
+import org.jenkinsci.plugins.isolationctx.utils.WorkflowUtil;
 import org.jenkinsci.plugins.workflow.actions.FlowNodeAction;
 import org.jenkinsci.plugins.workflow.graph.FlowNode;
 
 import hudson.model.InvisibleAction;
+import hudson.model.Run;
 
 public class IsolationContextAction extends InvisibleAction implements FlowNodeAction {
 
@@ -54,7 +56,7 @@ public class IsolationContextAction extends InvisibleAction implements FlowNodeA
 	public void onLoad(final FlowNode parent) {
 		this._flowNode = parent;
 		if (this.context != null) {
-			this.context.onLoad(parent);
+			this.context.onLoad(this._flowNode);
 			this._future = CompletableFuture.completedFuture(this.context);
 		}
 	}
@@ -115,5 +117,13 @@ public class IsolationContextAction extends InvisibleAction implements FlowNodeA
 				throw new IOException(t);
 			return null;
 		}
+	}
+
+	public static IsolationContextAction findContextAction(final FlowNode flowNode) {
+		return WorkflowUtil.findContextAction(IsolationContextAction.class, flowNode);
+	}
+
+	public static IsolationContextAction findContextAction(final Run<?, ?> run, final FlowNode flowNode) {
+		return WorkflowUtil.findContextAction(IsolationContextAction.class, run, flowNode);
 	}
 }

@@ -13,10 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jenkinsci.plugins.isolationctx.ctx.net;
+package org.jenkinsci.plugins.isolationctx.dto.net;
 
-import org.jenkinsci.plugins.isolationctx.FirewallDelegate;
-import org.jenkinsci.plugins.isolationctx.IsolationContext.NetLink;
+import org.jenkinsci.plugins.isolationctx.dto.FirewallDelegate;
 
 import jenkins.runeduniverse.utils.net.IpNetworkUtils;
 import jenkins.runeduniverse.utils.net.XStreamIp4Address;
@@ -28,7 +27,7 @@ import net.runeduniverse.lib.utils.net.api.Ip6Address;
 import net.runeduniverse.lib.utils.net.api.IpNet4Address;
 import net.runeduniverse.lib.utils.net.api.IpNet6Address;
 
-public class DefaultNetLink implements NetLink {
+public class DefaultNetInterface implements NetInterface {
 
 	private static final long serialVersionUID = 1L;
 
@@ -37,19 +36,15 @@ public class DefaultNetLink implements NetLink {
 	protected final IpNet6Address subnet6;
 	protected final Ip4Address hostAddr4;
 	protected final Ip6Address hostAddr6;
-	protected final Ip4Address contextAddr4;
-	protected final Ip6Address contextAddr6;
 
-	public DefaultNetLink(final FirewallDelegate firewall, //
-			final IpNet4Address subnet4, final Ip4Address hostAddr4, final Ip4Address contextAddr4, //
-			final IpNet6Address subnet6, final Ip6Address hostAddr6, final Ip6Address contextAddr6) {
+	public DefaultNetInterface(final FirewallDelegate firewall, //
+			final IpNet4Address subnet4, final Ip4Address hostAddr4, //
+			final IpNet6Address subnet6, final Ip6Address hostAddr6) {
 		this.firewall = firewall;
 		this.subnet4 = XStreamIpNet4Address.convert(subnet4);
 		this.hostAddr4 = XStreamIp4Address.convert(hostAddr4);
-		this.contextAddr4 = XStreamIp4Address.convert(contextAddr4);
 		this.subnet6 = XStreamIpNet6Address.convert(subnet6);
 		this.hostAddr6 = XStreamIp6Address.convert(hostAddr6);
-		this.contextAddr6 = XStreamIp6Address.convert(contextAddr6);
 	}
 
 	@Override
@@ -87,17 +82,7 @@ public class DefaultNetLink implements NetLink {
 		return this.hostAddr6;
 	}
 
-	@Override
-	public Ip4Address getContextAddressV4() {
-		return this.contextAddr4;
-	}
-
-	@Override
-	public Ip6Address getContextAddressV6() {
-		return this.contextAddr6;
-	}
-
-	public static DefaultNetLink createLoopback(final FirewallDelegate firewall, final boolean ipv4,
+	public static DefaultNetInterface createLoopback(final FirewallDelegate firewall, final boolean ipv4,
 			final boolean ipv6) {
 		Ip4Address addr4 = null;
 		IpNet4Address subnet4 = null;
@@ -113,8 +98,8 @@ public class DefaultNetLink implements NetLink {
 					0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 });
 			subnet6 = IpNetworkUtils.createIpNet6Address(addr6, (short) 128);
 		}
-		return new DefaultNetLink(firewall, //
-				subnet4, addr4, addr4, //
-				subnet6, addr6, addr6);
+		return new DefaultNetInterface(firewall, //
+				subnet4, addr4, //
+				subnet6, addr6);
 	}
 }

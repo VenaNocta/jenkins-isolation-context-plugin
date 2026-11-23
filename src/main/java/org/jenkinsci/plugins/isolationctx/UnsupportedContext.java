@@ -13,13 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jenkinsci.plugins.isolationctx.ctx;
+package org.jenkinsci.plugins.isolationctx;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.net.UnixDomainSocketAddress;
 
-import org.jenkinsci.plugins.isolationctx.IsolationContext;
+import org.jenkinsci.plugins.isolationctx.dto.net.NetInterface;
 import org.jenkinsci.plugins.workflow.graph.FlowNode;
 
 import hudson.AbortException;
@@ -101,16 +100,11 @@ public class UnsupportedContext implements IsolationContext {
 	}
 
 	@Override
-	public UnixDomainSocketAddress connectUnixSocket(final String path) throws IOException, InterruptedException {
+	public NetInterface connectNetInterface() throws IOException, InterruptedException {
 		throw new AbortException(ERR_FORCED_ISOLATION);
 	}
 
 	@Override
-	public NetLink connectNetLink() throws IOException, InterruptedException {
-		throw new AbortException(ERR_FORCED_ISOLATION);
-	}
-
-	@Override
-	public void disconnectNetLink(final NetLink link) {
+	public void disconnectNetInterface(final NetInterface iface) {
 	}
 }

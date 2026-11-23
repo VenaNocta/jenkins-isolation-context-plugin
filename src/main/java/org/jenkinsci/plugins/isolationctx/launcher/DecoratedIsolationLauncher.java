@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jenkinsci.plugins.isolationctx.ctx;
+package org.jenkinsci.plugins.isolationctx.launcher;
 
 import java.util.LinkedList;
 import java.util.List;

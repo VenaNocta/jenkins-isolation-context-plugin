@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jenkinsci.plugins.isolationctx.util;
+package org.jenkinsci.plugins.isolationctx.utils;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
@@ -22,32 +23,52 @@ import java.util.List;
 import java.util.concurrent.CompletionException;
 import java.util.function.Supplier;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Proc;
 import hudson.model.TaskListener;
-import hudson.FilePath;
+import hudson.remoting.LocalChannel;
+import hudson.remoting.VirtualChannel;
+import jenkins.security.MasterToSlaveCallable;
+import hudson.Launcher;
+import hudson.Launcher.LocalLauncher;
 import hudson.Launcher.ProcStarter;
+import hudson.Launcher.RemoteLauncher;
 
-public class WorkspaceLauncherUtil {
+public class LauncherUtil {
 
-	protected final Supplier<FilePath> workspaceSupplier;
+	protected final Supplier<VirtualChannel> channelSupplier;
 	protected final Supplier<TaskListener> listenerSupplier;
 
-	public WorkspaceLauncherUtil(final FilePath workspace, final TaskListener listener) {
-		this(() -> workspace, () -> listener);
-	}
-
-	public WorkspaceLauncherUtil(final Supplier<FilePath> workspaceSupplier,
-			final Supplier<TaskListener> listenerSupplier) {
-		this.workspaceSupplier = workspaceSupplier;
+	public LauncherUtil(final Supplier<VirtualChannel> channelSupplier, final Supplier<TaskListener> listenerSupplier) {
+		this.channelSupplier = channelSupplier;
 		this.listenerSupplier = listenerSupplier;
-	}
-
-	public FilePath getWorkspace() {
-		return this.workspaceSupplier.get();
 	}
 
 	public TaskListener logListener() {
 		return this.listenerSupplier.get();
+	}
+
+	public Launcher createLauncher(final TaskListener listener) throws IOException, InterruptedException {
+		return createLauncher(this.channelSupplier.get(), listener);
+	}
+
+	public static Launcher createLauncher(final VirtualChannel channel, final TaskListener listener)
+			throws IOException, InterruptedException {
+		if (channel == null)
+			return new LocalLauncher(listener);
+		if (channel instanceof LocalChannel)
+			return new LocalLauncher(listener, channel);
+		return new RemoteLauncher(listener, channel, channel.call(new IsUnix()));
+	}
+
+	private static final class IsUnix extends MasterToSlaveCallable<Boolean, IOException> {
+		@Override
+		@NonNull
+		public Boolean call() throws IOException {
+			return File.pathSeparatorChar == ':';
+		}
+
+		private static final long serialVersionUID = 1L;
 	}
 
 	public Proc wsExecAndJoinCmd(final List<String> cmd, final boolean readStderr)
@@ -57,9 +78,7 @@ public class WorkspaceLauncherUtil {
 
 	public Proc wsExecAndJoinCmd(final List<String> cmd, final boolean readStderr, final int expectedExitCode)
 			throws IOException, InterruptedException {
-		final ProcStarter procStarter = this.getWorkspace()
-				.createLauncher(logListener())
-				.launch()
+		final ProcStarter procStarter = createLauncher(logListener()).launch()
 				.cmds(cmd)
 				.readStdout();
 		if (readStderr)
@@ -91,9 +110,11 @@ public class WorkspaceLauncherUtil {
 	}
 
 	public static String outputToString(final Proc proc) throws CompletionException {
+		final InputStream stream = proc.getStdout();
+		if (stream == null)
+			return null;
 		try {
-			return new String(proc.getStdout()
-					.readAllBytes()).trim();
+			return new String(stream.readAllBytes()).trim();
 		} catch (IOException e) {
 			throw new CompletionException(e);
 		}

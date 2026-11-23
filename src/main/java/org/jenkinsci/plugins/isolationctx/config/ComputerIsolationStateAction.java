@@ -33,21 +33,24 @@ import java.util.stream.Collectors;
 
 import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
 import org.jenkinsci.plugins.isolationctx.handler.ComputerIsolationHandler;
-import org.jenkinsci.plugins.isolationctx.handler.NodeIsolationHandlerProvider;
+import org.jenkinsci.plugins.isolationctx.provider.NodeIsolationHandlerProvider;
 
 import com.thoughtworks.xstream.annotations.XStreamOmitField;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.FilePath;
 import hudson.model.Computer;
 import hudson.model.InvisibleAction;
-import hudson.model.Node;
 import hudson.model.Run;
 import hudson.model.Saveable;
 import hudson.model.TaskListener;
+import hudson.remoting.Channel;
+import hudson.remoting.VirtualChannel;
 import jenkins.model.Jenkins;
 import jenkins.runeduniverse.utils.net.IpNetworkUtils;
 import jenkins.runeduniverse.utils.net.XStreamIpNet4Address;
 import jenkins.runeduniverse.utils.net.XStreamIpNet6Address;
+import jenkins.security.XStreamNotDeserializable;
 import net.runeduniverse.lib.utils.net.api.Ip4Address;
 import net.runeduniverse.lib.utils.net.api.IpAddress;
 import net.runeduniverse.lib.utils.net.api.IpNet4Address;
@@ -66,7 +69,9 @@ public class ComputerIsolationStateAction extends InvisibleAction
 	@XStreamOmitField
 	private transient Object lockPorts = new Object();
 
+	@XStreamNotDeserializable
 	protected transient Computer computer;
+	@XStreamNotDeserializable
 	protected transient ComputerIsolationHandler handler;
 
 	protected final SortedSet<IpNet4Address> subnet4Stack;
@@ -170,9 +175,13 @@ public class ComputerIsolationStateAction extends InvisibleAction
 	}
 
 	@Override
-	public void setup(final TaskListener listener) throws IOException, InterruptedException {
-		isolationHandler().setup(listener);
-		isolationHandler().firewallInputRetainOpen(this.openPorts, listener);
+	public void setup(final VirtualChannel channel, final TaskListener listener)
+			throws IOException, InterruptedException {
+		final ComputerIsolationHandler isolationHandler = isolationHandler();
+		if (isolationHandler != null) {
+			isolationHandler.setup(channel, listener);
+			isolationHandler.firewallInputRetainOpen(this.openPorts, listener);
+		}
 		// cleanup broken reservations
 		final Set<String> runIds2Free = new LinkedHashSet<>();
 		for (Entry<IpNet4Address, String> entry : this.subnet4Reservations.entrySet()) {
@@ -282,7 +291,8 @@ public class ComputerIsolationStateAction extends InvisibleAction
 
 	protected void trySave() {
 		try {
-			save();
+			_save(this.computer.getNode()
+					.getRootPath());
 		} catch (IOException ignored) {
 			ignored.printStackTrace();
 		}
@@ -290,7 +300,14 @@ public class ComputerIsolationStateAction extends InvisibleAction
 
 	@Override
 	public void save() throws IOException {
-		final FilePath configFile = getConfigFile(this.computer.getNode());
+		_save(this.computer.getNode()
+				.getRootPath());
+	}
+
+	private final void _save(final FilePath rootPath) throws IOException {
+		final FilePath configFile = getConfigFile(rootPath);
+		if (configFile == null)
+			return;
 		try (OutputStream stream = configFile.write()) {
 			Jenkins.XSTREAM2.toXMLUTF8(this, stream);
 		} catch (InterruptedException e) {
@@ -298,35 +315,57 @@ public class ComputerIsolationStateAction extends InvisibleAction
 		}
 	}
 
-	protected static FilePath getConfigFile(final Node node) {
-		return node.getRootPath()
-				.child("isolation-ctx.xml");
+	protected static FilePath getConfigFile(final FilePath rootPath) {
+		return rootPath.child("isolation-ctx.xml");
 	}
 
-	protected static void injectHandler(final ComputerIsolationStateAction action, final Computer computer)
+	public static void injectHandler(@NonNull final ComputerIsolationStateAction action,
+			@NonNull final Computer computer, @NonNull final Channel channel, final FilePath rootPath)
 			throws IOException, InterruptedException {
-		final NodeIsolationHandlerProvider provider = NodeIsolationHandlerProvider.providerFor(computer);
-		if (provider != null)
-			action.handler = provider.buildHandler(computer);
+		final NodeIsolationHandlerProvider provider = NodeIsolationHandlerProvider.providerFor(computer, channel);
+		final ComputerIsolationHandler newHandler = provider == null ? null
+				: provider.buildHandler(computer, channel, rootPath);
+		if (action.handler == null) {
+			// new handler
+			action.handler = newHandler;
+			return;
+		}
+		if (newHandler == null) {
+			// handler disabled
+			action.handler.shutdown(channel, action.handler.logTaskListener());
+			action.handler = null;
+			return;
+		}
+		final ComputerIsolationHandler oldHandler = action.handler;
+		if (oldHandler.getClass() != newHandler.getClass()) {
+			// new handler, Node must have been reconfigured!
+			oldHandler.shutdown(channel, oldHandler.logTaskListener());
+		}
+		// still the same handler, probably a reconnect - no reason to shutdown
+		action.handler = newHandler;
 	}
 
-	protected static ComputerIsolationStateAction load(final Computer computer)
+	private static ComputerIsolationStateAction _load(final Computer computer, final FilePath root)
 			throws IOException, InterruptedException {
-		final FilePath configFile = getConfigFile(computer.getNode());
+		final FilePath configFile = getConfigFile(root);
+		final ComputerIsolationStateAction action;
 		if (!configFile.exists()) {
-			final ComputerIsolationStateAction action = new ComputerIsolationStateAction(computer);
-			injectHandler(action, computer);
-			action.save();
+			action = new ComputerIsolationStateAction(computer);
+			action._save(root);
 			return action;
 		}
-
-		final ComputerIsolationStateAction action;
 		try (InputStream stream = configFile.read()) {
 			action = (ComputerIsolationStateAction) Jenkins.XSTREAM2.fromXML(stream);
 		}
-
 		action.computer = computer;
-		injectHandler(action, computer);
+		return action;
+	}
+
+	public synchronized static ComputerIsolationStateAction init(@NonNull final Computer computer,
+			@NonNull final FilePath root) throws IOException, InterruptedException {
+		ComputerIsolationStateAction action = computer.getAction(ComputerIsolationStateAction.class);
+		if (action == null)
+			computer.addAction(action = _load(computer, root));
 		return action;
 	}
 
@@ -334,10 +373,7 @@ public class ComputerIsolationStateAction extends InvisibleAction
 			throws IOException, InterruptedException {
 		if (computer == null)
 			return null;
-		ComputerIsolationStateAction action = computer.getAction(ComputerIsolationStateAction.class);
-		if (action == null)
-			computer.addAction(action = load(computer));
-		return action;
+		return computer.getAction(ComputerIsolationStateAction.class);
 	}
 
 	@Override

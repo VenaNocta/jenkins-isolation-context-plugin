@@ -18,22 +18,29 @@ package org.jenkinsci.plugins.isolationctx.provider;
 import java.io.IOException;
 
 import org.jenkinsci.plugins.isolationctx.handler.ScriptedLnxIsolationHandler;
+import org.jenkinsci.plugins.isolationctx.config.IsolationRuntime;
+import org.jenkinsci.plugins.isolationctx.config.NodeIsolationProperty;
+import org.jenkinsci.plugins.isolationctx.config.ScriptedLnxIsolationRuntime;
 import org.jenkinsci.plugins.isolationctx.handler.ComputerIsolationHandler;
-import org.jenkinsci.plugins.isolationctx.handler.NodeIsolationHandlerProvider;
 
 import hudson.Extension;
+import hudson.FilePath;
 import hudson.model.Computer;
+import hudson.remoting.Channel;
+import hudson.util.RemotingDiagnostics;
 
 @Extension
 public class ScriptedLnxIsolationHandlerProvider implements NodeIsolationHandlerProvider {
 
 	@Override
-	public boolean isApplicable(final Computer computer) {
+	public boolean isApplicable(final Computer computer, final Channel channel) {
 		if (computer == null)
 			return false;
-		// TODO require this handler to be selected!
+		final IsolationRuntime runtime = NodeIsolationProperty.getIsolationRuntime(computer.getNode());
+		if (!(runtime instanceof ScriptedLnxIsolationRuntime))
+			return false;
 		try {
-			final Object value = computer.getSystemProperties()
+			final Object value = RemotingDiagnostics.getSystemProperties(channel)
 					.get("os.name");
 			if (value instanceof String os) {
 				return os.toLowerCase()
@@ -46,7 +53,8 @@ public class ScriptedLnxIsolationHandlerProvider implements NodeIsolationHandler
 	}
 
 	@Override
-	public ComputerIsolationHandler buildHandler(final Computer computer) throws IOException, InterruptedException {
-		return new ScriptedLnxIsolationHandler(computer);
+	public ComputerIsolationHandler buildHandler(final Computer computer, final Channel channel,
+			final FilePath rootPath) throws IOException, InterruptedException {
+		return new ScriptedLnxIsolationHandler(computer, channel, rootPath);
 	}
 }

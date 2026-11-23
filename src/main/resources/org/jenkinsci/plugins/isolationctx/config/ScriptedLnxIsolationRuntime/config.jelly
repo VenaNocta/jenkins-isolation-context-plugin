@@ -1,0 +1,32 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form"
+	xmlns:l="/lib/layout" xmlns:st="jelly:stapler">
+	<st:adjunct
+		includes="org.jenkinsci.plugins.isolationctx.config.ScriptedLnxIsolationRuntime.overlayFsMounts" />
+	<f:entry
+		title="Jenkins User's aux. Admin Group Name (for use with sudo)"
+		field="adminGroup">
+		<f:textbox />
+	</f:entry>
+	<f:entry
+		title="Overlay Root Path (default: &amp;lt;workspace&amp;gt;@overlay)"
+		field="overlayRootPath">
+		<f:textbox />
+	</f:entry>
+	<div id="overlayFsMountsSection"
+		data-reset-url="${descriptor.descriptorFullUrl}/resetOverlayFsMounts">
+		<f:advanced title="OverlayFS Mounts">
+			<f:entry>
+				<button type="button" id="overlayFsMountsReset"
+					class="jenkins-button">
+					LOAD DEFAULTS
+				</button>
+			</f:entry>
+			<f:entry>
+				<f:repeatableProperty field="overlayFsMounts"
+					default="${descriptor.defaultOverlayFsMounts()}"
+					header="OCI Mount Entry" />
+			</f:entry>
+		</f:advanced>
+	</div>
+</j:jelly>

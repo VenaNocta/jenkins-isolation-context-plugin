@@ -1,0 +1,37 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form"
+	xmlns:l="/lib/layout" xmlns:st="jelly:stapler">
+	<f:repeatableDeleteButton />
+	<div style="display:flex; gap:20px; width:100%;">
+		<div style="flex:0 0 auto; min-width:50%; display:flex; gap:20px;">
+			<div style="flex:0 0 auto; min-width:50%">
+				<f:entry field="type2" title="Type" default="tmpfs">
+					<f:select />
+				</f:entry>
+			</div>
+			<div style="flex:0 0 auto; min-width:0%"
+				class="mount-altType-field">
+				<f:entry field="altType" title="Custom Type">
+					<f:textbox />
+				</f:entry>
+			</div>
+		</div>
+		<div style="flex:1; min-width:0;" class="mount-source-field">
+			<f:entry field="source" title="Source">
+				<f:textbox />
+			</f:entry>
+		</div>
+	</div>
+	<div style="display:flex; gap:20px; width:100%;">
+		<div style="flex:0 0 auto; min-width:50%">
+			<f:entry field="destination" title="Destination">
+				<f:textbox />
+			</f:entry>
+		</div>
+		<div style="flex:1; min-width:0;">
+			<f:entry field="options2" title="Options">
+				<f:textbox />
+			</f:entry>
+		</div>
+	</div>
+</j:jelly>

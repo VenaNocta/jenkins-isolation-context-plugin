@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jenkinsci.plugins.isolationctx;
+package org.jenkinsci.plugins.isolationctx.provider;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.jenkinsci.plugins.workflow.steps.StepDescriptor;
 import org.jenkinsci.plugins.workflow.steps.StepExecution;
+import org.jenkinsci.plugins.isolationctx.IsolationContext;
 import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.steps.StepContext;
 

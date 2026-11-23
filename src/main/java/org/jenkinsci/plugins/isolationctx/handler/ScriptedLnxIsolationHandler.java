@@ -17,37 +17,58 @@ package org.jenkinsci.plugins.isolationctx.handler;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-import org.jenkinsci.plugins.isolationctx.Scripts;
-import org.jenkinsci.plugins.isolationctx.ctx.LinuxNamespaceContext;
-import org.jenkinsci.plugins.isolationctx.dto.LinuxMountEntry;
+import org.jenkinsci.plugins.isolationctx.IsolationContext;
+import org.jenkinsci.plugins.isolationctx.LinuxNamespaceContext;
+import org.jenkinsci.plugins.isolationctx.config.NodeIsolationProperty;
+import org.jenkinsci.plugins.isolationctx.config.OciMountConfig;
+import org.jenkinsci.plugins.isolationctx.config.ScriptedLnxIsolationRuntime;
+import org.jenkinsci.plugins.isolationctx.dto.LnxIdentity;
+import org.jenkinsci.plugins.isolationctx.dto.LnxMountEntry;
+import org.jenkinsci.plugins.isolationctx.dto.OciMountEntry;
 import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
+import org.jenkinsci.plugins.isolationctx.dto.net.LnxNetInterface;
+import org.jenkinsci.plugins.isolationctx.dto.net.LnxNetLink;
+import org.jenkinsci.plugins.isolationctx.utils.LauncherUtil;
+import org.jenkinsci.plugins.isolationctx.utils.LazyAsyncRef;
+import org.jenkinsci.plugins.isolationctx.utils.Scripts;
+import org.jenkinsci.plugins.workflow.graph.FlowNode;
+
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.Proc;
 import hudson.model.Computer;
+import hudson.model.Run;
 import hudson.model.TaskListener;
+import hudson.remoting.Channel;
+import hudson.remoting.VirtualChannel;
 import hudson.util.ArgumentListBuilder;
 import hudson.util.LogTaskListener;
 import hudson.util.StreamTaskListener;
 import jenkins.util.io.OnMaster;
+import net.runeduniverse.lib.utils.net.api.IpNet4Address;
+import net.runeduniverse.lib.utils.net.api.IpNet6Address;
 
-public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, OnMaster, OciRuntimeHandler {
+public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, OnMaster, //
+		LnxHostHandler, LnxNetNamespaceHandler, OverlayFsHandler, OciRuntimeHandler {
 
 	private static final Logger LOGGER = Logger.getLogger(LinuxNamespaceContext.class.getName());
 
@@ -55,6 +76,8 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 
 	@NonNull
 	protected final Computer computer;
+	@NonNull
+	protected final Channel channel;
 	@NonNull
 	protected final String _logPath;
 	@NonNull
@@ -64,20 +87,27 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 	@NonNull
 	protected final String _firewallToolPath;
 	@NonNull
+	protected final String _networkToolPath;
+	@NonNull
 	protected final String _mountToolPath;
 	@NonNull
 	protected final String _ociRuntimeToolPath;
+	@NonNull
+	protected final LazyAsyncRef<LnxIdentity> hostLnxIdentityRef;
+	@NonNull
+	protected final LazyAsyncRef<LnxIdentity> ctxLnxIdentityRef;
 
 	@CheckForNull
 	protected TaskListener logListener;
 
-	public ScriptedLnxIsolationHandler(@NonNull final Computer computer) throws IOException, InterruptedException {
+	public ScriptedLnxIsolationHandler(@NonNull final Computer computer, final Channel channel, final FilePath rootPath)
+			throws IOException, InterruptedException {
 		// NOTE: never persist Node
-		// -> it's a DTO and is updated on every Computer reconnect!
+		// -> it's a DTO and is replaced on every Computer reconnect!
 		Objects.requireNonNull(this.computer = computer);
+		// NOTE: retain Channel as setup runs before channel is persisted in Computer
+		Objects.requireNonNull(this.channel = channel);
 
-		final FilePath rootPath = this.computer.getNode()
-				.getRootPath();
 		this._logPath = rootPath.child("logs/NodeIsolation.log")
 				.absolutize()
 				.getRemote();
@@ -86,8 +116,12 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 				.getRemote();
 		this._dataRootPath = "data";
 		this._firewallToolPath = "firewall-tool.py";
+		this._networkToolPath = "network-tool.py";
 		this._mountToolPath = "mount-tool.py";
 		this._ociRuntimeToolPath = "oci-runtime-tool.sh";
+
+		this.hostLnxIdentityRef = new LazyAsyncRef<>(Computer.threadPoolForRemoting, this::_supplyHostLnxIdentity);
+		this.ctxLnxIdentityRef = new LazyAsyncRef<>(Computer.threadPoolForRemoting, this::_supplyCtxLnxIdentity);
 	}
 
 	@Override
@@ -95,12 +129,17 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 		return this.active.get();
 	}
 
+	@Override
+	public Computer getComputer() {
+		return this.computer;
+	}
+
 	protected final FilePath logPath() {
 		return new FilePath(this.computer.getChannel(), this._logPath);
 	}
 
 	protected final FilePath rootPath() {
-		return new FilePath(this.computer.getChannel(), this._rootPath);
+		return new FilePath(this.channel, this._rootPath);
 	}
 
 	protected final FilePath dataRootPath() {
@@ -109,6 +148,10 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 
 	protected final FilePath firewallToolPath() {
 		return rootPath().child(this._firewallToolPath);
+	}
+
+	protected final FilePath networkToolPath() {
+		return rootPath().child(this._networkToolPath);
 	}
 
 	protected final FilePath mountToolPath() {
@@ -122,6 +165,22 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 	public final Launcher createLauncher(final TaskListener listener) {
 		return this.computer.getNode()
 				.createLauncher(listener);
+	}
+
+	protected final LauncherUtil launchUtil() {
+		return new LauncherUtil(this.computer::getChannel, this::logTaskListener);
+	}
+
+	protected final ScriptedLnxIsolationRuntime isolationRuntime() {
+		if (NodeIsolationProperty
+				.getIsolationRuntime(this.computer.getNode()) instanceof ScriptedLnxIsolationRuntime runtime)
+			return runtime;
+		return null;
+	}
+
+	protected final Proc wsExecAndJoinCmd(final List<String> cmd, final boolean readStderr)
+			throws IOException, InterruptedException {
+		return launchUtil().wsExecAndJoinCmd(cmd, readStderr);
 	}
 
 	@Override
@@ -138,69 +197,96 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 		}
 	}
 
-	protected void execScriptTask(final Collection<String> tasks, final TaskListener listener)
-			throws IOException, InterruptedException {
-		// deploy file from resources -> path
-		final FilePath networkPath = rootPath().child("network-tool.py");
+	protected void deployScripts() throws IOException, InterruptedException {
+		// -- deploy scripts from resources -> path --
 		// jar:/scripts/network/elinux-python3.py
-		Scripts.NETWORK__ENTERPRISE_LINUX_PYTHON3.deployTo(networkPath);
+		Scripts.NETWORK__ENTERPRISE_LINUX_PYTHON3.deployTo(networkToolPath());
 		// jar:/scripts/firewall/nftables-python3.py
 		Scripts.FIREWALL__NFTABLES_PYTHON3.deployTo(firewallToolPath());
 		// jar:/scripts/data/linux-mount-python3.py
 		Scripts.DATA__LINUX_MOUNT_PYTHON3.deployTo(mountToolPath());
 		// jar:/scripts/runtime/linux-crun.sh
 		Scripts.RUNTIME__LINUX_CRUN_SHELL.deployTo(ociRuntimeToolPath());
+	}
 
-		final Launcher launcher = createLauncher(listener);
+	protected boolean execScriptTask(final VirtualChannel channel, final Collection<String> tasks,
+			final TaskListener listener) throws IOException, InterruptedException {
+		final Launcher launcher = LauncherUtil.createLauncher(channel, listener);
+		boolean allOk = true;
 		// network setup
-		launcher.launch()
-				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", networkPath.absolutize()
-						.getRemote()).add(tasks))
-				.start()
-				.joinWithTimeout(30, TimeUnit.SECONDS, listener);
+		final FilePath networkToolPath = new FilePath(channel, this._rootPath + "/" + this._networkToolPath);
+		if (networkToolPath.exists()) {
+			launcher.launch()
+					.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", networkToolPath.getRemote())
+							.add(tasks))
+					.start()
+					.joinWithTimeout(30, TimeUnit.SECONDS, listener);
+		} else
+			allOk = false;
 		// firewall setup
-		launcher.launch()
-				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", firewallToolPath().absolutize()
-						.getRemote()).add(tasks))
-				.start()
-				.joinWithTimeout(30, TimeUnit.SECONDS, listener);
+		final FilePath firewallToolPath = new FilePath(channel, this._rootPath + "/" + this._firewallToolPath);
+		if (firewallToolPath.exists()) {
+			launcher.launch()
+					.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", firewallToolPath.getRemote())
+							.add(tasks))
+					.start()
+					.joinWithTimeout(30, TimeUnit.SECONDS, listener);
+		} else
+			allOk = false;
 		// mount isolation setup
-		launcher.launch()
-				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", mountToolPath().absolutize()
-						.getRemote()).add(tasks))
-				.start()
-				.joinWithTimeout(30, TimeUnit.SECONDS, listener);
+		final FilePath mountToolPath = new FilePath(channel, this._rootPath + "/" + this._mountToolPath);
+		if (mountToolPath.exists()) {
+			launcher.launch()
+					.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", mountToolPath.getRemote())
+							.add(tasks))
+					.start()
+					.joinWithTimeout(30, TimeUnit.SECONDS, listener);
+		} else
+			allOk = false;
 		// runtime setup
-		launcher.launch()
-				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/bash", ociRuntimeToolPath().absolutize()
-						.getRemote()).add(tasks))
-				.start()
-				.joinWithTimeout(30, TimeUnit.SECONDS, listener);
+		final FilePath ociRuntimeToolPath = new FilePath(channel, this._rootPath + "/" + this._ociRuntimeToolPath);
+		if (ociRuntimeToolPath.exists()) {
+			launcher.launch()
+					.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/bash", ociRuntimeToolPath.getRemote())
+							.add(tasks))
+					.start()
+					.joinWithTimeout(30, TimeUnit.SECONDS, listener);
+		} else
+			allOk = false;
+		return allOk;
 	}
 
 	@Override
-	public void setup(final TaskListener listener) throws IOException, InterruptedException {
-		try {
-			execScriptTask(Arrays.asList("setup"), listener);
-			this.active.set(true);
-		} catch (Throwable e) {
-			this.active.set(false);
-			throw e;
-		}
-	}
-
-	@Override
-	public void shutdown(final TaskListener listener) throws IOException, InterruptedException {
-		try {
-			execScriptTask(Arrays.asList("shutdown"), listener);
-			this.active.set(false);
-		} catch (Throwable e) {
-			throw e;
-		}
-	}
-
-	protected void networkHostInterfaceExec(final Set<String> data, final String operation, final TaskListener listener)
+	public void setup(final VirtualChannel channel, final TaskListener listener)
 			throws IOException, InterruptedException {
+		try {
+			deployScripts();
+			this.active.set(execScriptTask(channel, Arrays.asList("setup"), listener));
+		} catch (Throwable e) {
+			this.active.set(false);
+			throw e;
+		}
+	}
+
+	@Override
+	public void shutdown(final VirtualChannel channel, final TaskListener listener)
+			throws IOException, InterruptedException {
+		try {
+			execScriptTask(channel, Arrays.asList("shutdown"), listener);
+			this.active.set(false);
+		} catch (Throwable e) {
+			throw e;
+		}
+	}
+
+	@Override
+	public IsolationContext createIsolationContext(final Run<?, ?> run, final FlowNode flowNode,
+			final Computer computer, final TaskListener listener) {
+		return new LinuxNamespaceContext(run, flowNode, computer, listener);
+	}
+
+	protected void firewallHostInterfaceExec(final Set<String> data, final String operation,
+			final TaskListener listener) throws IOException, InterruptedException {
 		dataRootPath().mkdirs();
 		final FilePath tmpFilePath = dataRootPath().createTempFile("hostif-", ".csv");
 		try {
@@ -223,28 +309,28 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 		}
 	}
 
-	public void networkHostInterfaceAdd(final Set<String> data, final TaskListener listener)
+	public void firewallHostInterfaceAdd(final Set<String> data, final TaskListener listener)
 			throws IOException, InterruptedException {
 		if (data == null || data.isEmpty())
 			return;
-		networkHostInterfaceExec(data, "add", listener);
+		firewallHostInterfaceExec(data, "add", listener);
 	}
 
-	public void networkHostInterfaceRetain(final Set<String> data, final TaskListener listener)
+	public void firewallHostInterfaceRetain(final Set<String> data, final TaskListener listener)
 			throws IOException, InterruptedException {
 		if (data == null || data.isEmpty())
 			return;
-		networkHostInterfaceExec(data, "set", listener);
+		firewallHostInterfaceExec(data, "set", listener);
 	}
 
-	public void networkHostInterfaceRemove(final Set<String> data, final TaskListener listener)
+	public void firewallHostInterfaceRemove(final Set<String> data, final TaskListener listener)
 			throws IOException, InterruptedException {
 		if (data == null || data.isEmpty())
 			return;
-		networkHostInterfaceExec(data, "del", listener);
+		firewallHostInterfaceExec(data, "del", listener);
 	}
 
-	public void networkHostInterfaceRemoveAll(final TaskListener listener) throws IOException, InterruptedException {
+	public void firewallHostInterfaceRemoveAll(final TaskListener listener) throws IOException, InterruptedException {
 		final Launcher launcher = createLauncher(listener);
 		launcher.launch()
 				.cmds(new ArgumentListBuilder("/usr/bin/sudo", "/usr/bin/python3", firewallToolPath().absolutize()
@@ -324,6 +410,67 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 				.joinWithTimeout(30, TimeUnit.SECONDS, nodeLog);
 	}
 
+	private final LnxIdentity _supplyHostLnxIdentity(final LnxIdentity oldIdentity, final Throwable oldEx) {
+		final LnxIdentity identity = LnxIdentity.identify(launchUtil());
+		if (oldIdentity == null)
+			return identity;
+		return identity.copyTo(oldIdentity);
+	}
+
+	private final LnxIdentity _supplyCtxLnxIdentity(final LnxIdentity oldIdentity, final Throwable oldEx) {
+		try {
+			LnxIdentity identity = Objects.requireNonNull(this.hostLnxIdentityRef.get());
+			identity = restrictLinuxIdentity(identity.copy());
+			if (oldIdentity == null)
+				return identity;
+			return identity.copyTo(oldIdentity);
+		} catch (CancellationException ex) {
+			throw ex;
+		} catch (Throwable ex) {
+			if (ex instanceof ExecutionException)
+				ex = ex.getCause();
+			throw new CompletionException(ex);
+		}
+	}
+
+	protected LnxIdentity restrictLinuxIdentity(final LnxIdentity identity) {
+		final ScriptedLnxIsolationRuntime isoRuntime = isolationRuntime();
+		if (isoRuntime != null) {
+			identity.removeGroupIds(LnxIdentity.groupIdByName(launchUtil(), isoRuntime.getAdminGroup()));
+		}
+		return identity;
+	}
+
+	public LnxIdentity hostLnxIdentity() throws IOException, InterruptedException {
+		try {
+			return this.hostLnxIdentityRef.get();
+		} catch (ExecutionException e) {
+			final Throwable cause = e.getCause();
+			if (cause instanceof IOException ex)
+				throw ex;
+			if (cause instanceof InterruptedException ex)
+				throw ex;
+			if (cause instanceof RuntimeException ex)
+				throw ex;
+			throw new RuntimeException(cause);
+		}
+	}
+
+	public LnxIdentity ctxLnxIdentity() throws IOException, InterruptedException {
+		try {
+			return this.ctxLnxIdentityRef.get();
+		} catch (ExecutionException e) {
+			final Throwable cause = e.getCause();
+			if (cause instanceof IOException ex)
+				throw ex;
+			if (cause instanceof InterruptedException ex)
+				throw ex;
+			if (cause instanceof RuntimeException ex)
+				throw ex;
+			throw new RuntimeException(cause);
+		}
+	}
+
 	protected void mountToolExec(final List<String> operations, final TaskListener listener)
 			throws IOException, InterruptedException {
 		final Launcher launcher = createLauncher(listener);
@@ -334,63 +481,47 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 				.joinWithTimeout(30, TimeUnit.SECONDS, listener);
 	}
 
-	public OverlayMountData overlayCreate(final FilePath overlayBasePath) throws IOException, InterruptedException {
+	@Override
+	public OverlayFsHandler.OverlayFsMountData overlayFsCreate(final FilePath overlayBasePath)
+			throws IOException, InterruptedException {
 		final TaskListener nodeLog = logTaskListener();
 		mountToolExec(Arrays.asList("mount", "overlay", "create", overlayBasePath.absolutize()
 				.getRemote()), nodeLog);
-		final OverlayMountData overlay = new OverlayMountData(this, overlayBasePath);
+		final OverlayFsHandler.OverlayFsMountData overlay = new OverlayFsHandler.OverlayFsMountData(this,
+				overlayBasePath);
 		return overlay;
 	}
 
-	public void overlayRemove(final FilePath overlayBasePath) throws IOException, InterruptedException {
+	@Override
+	public void overlayFsRemove(final FilePath overlayBasePath) throws IOException, InterruptedException {
 		final TaskListener nodeLog = logTaskListener();
 		mountToolExec(Arrays.asList("mount", "overlay", "cleanup", overlayBasePath.absolutize()
 				.getRemote()), nodeLog);
 
 	}
 
-	public static class OverlayMountData implements Serializable {
-
-		private static final long serialVersionUID = 1L;
-
-		protected final Set<String> bindMounts = new LinkedHashSet<>();
-
-		// /var/jenkins/workspace/<job>@overlay/
-		protected final String basePath;
-		// /var/jenkins/workspace/<job>@overlay/rootfs
-		protected final String rootPath;
-		protected String relWorkspacePath = "";
-
-		protected transient ScriptedLnxIsolationHandler handler;
-
-		protected OverlayMountData(final ScriptedLnxIsolationHandler handler, final FilePath overlayBasePath) {
-			this.handler = handler;
-			this.basePath = overlayBasePath.getRemote();
-			this.rootPath = overlayBasePath.child("rootfs")
-					.getRemote();
+	@Override
+	public OciBundleConfig ociBundleDefaultConfig(final LnxIdentity identity, final String hostname,
+			final TaskListener listener) {
+		final ScriptedLnxIsolationRuntime runtime = isolationRuntime();
+		final OciBundleConfig ociConfig = new OciBundleConfig(identity, hostname);
+		// apply custom overlay mounts
+		if (runtime != null) {
+			runtime.getOverlayFsMounts()
+					.stream()
+					.filter(OciMountConfig::isValid)
+					.map(ScriptedLnxIsolationHandler::toOciMountEntry)
+					.forEachOrdered(ociConfig::addMount);
 		}
+		return ociConfig.addProcMount()
+				.addTmpfsMount(this.computer.getNode()
+						.getRootPath()
+						.getRemote(), "mode=755", "size=64m");
+	}
 
-		public void initHandler(final ScriptedLnxIsolationHandler handler) {
-			this.handler = handler;
-		}
-
-		public FilePath basePath() {
-			return new FilePath(this.handler.computer.getChannel(), this.basePath);
-		}
-
-		public FilePath rootPath() {
-			return new FilePath(this.handler.computer.getChannel(), this.rootPath);
-		}
-
-		public FilePath workspacePath() {
-			return rootPath().child(this.relWorkspacePath);
-		}
-
-		public void computeWorkspacePath(final FilePath wsPath) throws IOException, InterruptedException {
-			this.relWorkspacePath = wsPath.absolutize()
-					.getRemote()
-					.substring(1);
-		}
+	protected static OciMountEntry toOciMountEntry(final OciMountConfig config) {
+		return new LnxMountEntry(config.getAltType(), config.getSource(), config.getDestination())
+				.addOptions(config.getOptionsAsStream());
 	}
 
 	protected int ociRuntimeToolExec(final List<String> operations, final TaskListener listener)
@@ -407,13 +538,14 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 	public long ociRuntimeStart(final FilePath bundlePath, final String containerId, final TaskListener listener)
 			throws IOException, InterruptedException {
 		final TaskListener nodeLog = logTaskListener();
-		final FilePath pidFilePath = bundlePath.child("handle.pid")
-				.absolutize();
+		final String remoteBundlePath = bundlePath.absolutize()
+				.getRemote();
+		final String remotePidFilePath = remoteBundlePath + "/handle.pid";
 
-		ociRuntimeToolExec(Arrays.asList("run", containerId, bundlePath.absolutize()
-				.getRemote(), pidFilePath.getRemote()), nodeLog);
+		ociRuntimeToolExec(Arrays.asList("run", containerId, remoteBundlePath, remotePidFilePath), nodeLog);
 
-		return Long.parseLong(pidFilePath.readToString());
+		return Long.parseLong(bundlePath.child(remotePidFilePath)
+				.readToString());
 	}
 
 	@Override
@@ -424,15 +556,15 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 	}
 
 	@Override
-	public boolean ociRuntimeMountsAdd(final long processId, final String containerId,
-			final Set<LinuxMountEntry> configs, final TaskListener listener) throws IOException, InterruptedException {
+	public boolean ociRuntimeMountsAdd(final long processId, final String containerId, final Set<LnxMountEntry> configs,
+			final TaskListener listener) throws IOException, InterruptedException {
 		if (processId == -1 || configs.isEmpty())
 			return false;
 		final TaskListener nodeLog = logTaskListener();
 		final FilePath tmpFilePath = dataRootPath().createTempFile("ociMounts-", ".json");
 		try (OutputStream stream = tmpFilePath.write()) {
 			final String content = "[" + configs.stream()
-					.map(LinuxMountEntry::toOciJson)
+					.map(LnxMountEntry::toOciJson)
 					.collect(Collectors.joining(",")) + "]";
 			stream.write(content.getBytes(StandardCharsets.UTF_8));
 			stream.flush();
@@ -447,14 +579,14 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 
 	@Override
 	public boolean ociRuntimeMountsRemove(final long processId, final String containerId,
-			final Set<LinuxMountEntry> configs, final TaskListener listener) throws IOException, InterruptedException {
+			final Set<LnxMountEntry> configs, final TaskListener listener) throws IOException, InterruptedException {
 		if (processId == -1 || configs.isEmpty())
 			return false;
 		final TaskListener nodeLog = logTaskListener();
 		final FilePath tmpFilePath = dataRootPath().createTempFile("ociMounts-", ".json");
 		try (OutputStream stream = tmpFilePath.write()) {
 			final String content = "[" + configs.stream()
-					.map(LinuxMountEntry::toOciJson)
+					.map(LnxMountEntry::toOciJson)
 					.collect(Collectors.joining(",")) + "]";
 			stream.write(content.getBytes(StandardCharsets.UTF_8));
 			stream.flush();
@@ -465,5 +597,104 @@ public class ScriptedLnxIsolationHandler implements ComputerIsolationHandler, On
 		} finally {
 			tmpFilePath.delete();
 		}
+	}
+
+	protected List<String> nsenterNetCmd(final long processId) {
+		final List<String> cmd = new ArrayList<>();
+
+		// sudo nsenter --target=75008 --net --
+		cmd.add("sudo");
+		cmd.add("nsenter");
+		cmd.add("--target=" + processId);
+		cmd.add("--net");
+		cmd.add("--");
+
+		return cmd;
+	}
+
+	@Override
+	public boolean ctxCreateLoopbackIface(final long processId, final LnxNetInterface iface)
+			throws IOException, InterruptedException {
+		if (processId == -1 || iface == null)
+			return false;
+
+		final List<String> netCmd = nsenterNetCmd(processId);
+		netCmd.add("ip");
+		netCmd.add("link");
+		netCmd.add("set");
+		netCmd.add(iface.getHostIfaceName());
+		netCmd.add("up");
+		wsExecAndJoinCmd(netCmd, true);
+		return true;
+	}
+
+	@Override
+	public boolean ctxConnectToHost(final long processId, final LnxNetLink link)
+			throws IOException, InterruptedException {
+		if (processId == -1)
+			return false;
+
+		final String hostIfaceName = link.getHostIfaceName();
+		final String contextIfaceName = link.getContextIfaceName();
+		wsExecAndJoinCmd(//
+				Arrays.asList("sudo", "ip", "link", "add", hostIfaceName, "type", "veth", "peer", "name",
+						contextIfaceName)//
+				, true);
+		wsExecAndJoinCmd(//
+				Arrays.asList("sudo", "ip", "link", "set", contextIfaceName, "netns", Long.toString(processId))//
+				, true);
+
+		final IpNet4Address subnet4 = link.getSubnetV4();
+		if (subnet4 != null) {
+			wsExecAndJoinCmd(//
+					Arrays.asList("sudo", "ip", "addr", "add", link.getHostAddressV4()
+							.toCidrNotation() + "/" + subnet4.getMask(), "dev", hostIfaceName)//
+					, true);
+		}
+
+		final IpNet6Address subnet6 = link.getSubnetV6();
+		if (subnet6 != null) {
+			wsExecAndJoinCmd(//
+					Arrays.asList("sudo", "ip", "addr", "add", link.getHostAddressV6()
+							.toCidrNotation() + "/" + subnet6.getMask(), "dev", hostIfaceName)//
+					, true);
+		}
+		wsExecAndJoinCmd(//
+				Arrays.asList("sudo", "ip", "link", "set", hostIfaceName, "up")//
+				, true);
+
+		List<String> cmd;
+		if (subnet4 != null) {
+			cmd = nsenterNetCmd(processId);
+			cmd.addAll(Arrays.asList("ip", "addr", "add", link.getContextAddressV4()
+					.toCidrNotation() + "/30", "dev", contextIfaceName));
+			wsExecAndJoinCmd(cmd, true);
+		}
+		if (subnet6 != null) {
+			cmd = nsenterNetCmd(processId);
+			cmd.addAll(Arrays.asList("ip", "addr", "add", link.getContextAddressV6()
+					.toCidrNotation() + "/126", "dev", contextIfaceName));
+			wsExecAndJoinCmd(cmd, true);
+		}
+		cmd = nsenterNetCmd(processId);
+		cmd.addAll(Arrays.asList("ip", "link", "set", contextIfaceName, "up"));
+		wsExecAndJoinCmd(cmd, true);
+
+		// add connected link to firewall interface filter
+		firewallHostInterfaceAdd(Set.of(hostIfaceName), logTaskListener());
+		return true;
+	}
+
+	@Override
+	public boolean ctxDisconnectFromHost(final long processId, final LnxNetLink link)
+			throws IOException, InterruptedException {
+		final TaskListener nodeLog = logTaskListener();
+		try {
+			wsExecAndJoinCmd(Arrays.asList("sudo", "ip", "link", "del", link.getHostIfaceName()), true);
+		} finally {
+			// remove disconnected link from firewall interface filter
+			firewallHostInterfaceRemove(Set.of(link.getHostIfaceName()), nodeLog);
+		}
+		return true;
 	}
 }

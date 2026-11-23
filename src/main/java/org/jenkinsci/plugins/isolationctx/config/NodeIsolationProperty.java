@@ -18,7 +18,6 @@ package org.jenkinsci.plugins.isolationctx.config;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 import hudson.Extension;
-import hudson.Util;
 import hudson.model.Node;
 import hudson.slaves.NodeProperty;
 import hudson.slaves.NodePropertyDescriptor;
@@ -26,24 +25,24 @@ import hudson.slaves.NodePropertyDescriptor;
 public class NodeIsolationProperty extends NodeProperty<Node> {
 
 	private final boolean disabled;
-	private final String adminGroup;
+	private final IsolationRuntime isolationRuntime;
 
 	public NodeIsolationProperty() {
 		this(false, null);
 	}
 
 	@DataBoundConstructor
-	public NodeIsolationProperty(final boolean disabled, final String adminGroup) {
+	public NodeIsolationProperty(final boolean disabled, final IsolationRuntime isolationRuntime) {
 		this.disabled = disabled;
-		this.adminGroup = Util.fixEmptyAndTrim(adminGroup);
+		this.isolationRuntime = isolationRuntime;
 	}
 
 	public boolean isDisabled() {
 		return this.disabled;
 	}
 
-	public String getAdminGroup() {
-		return this.adminGroup;
+	public IsolationRuntime getIsolationRuntime() {
+		return this.isolationRuntime;
 	}
 
 	public static boolean isDisabled(final Node node) {
@@ -56,18 +55,20 @@ public class NodeIsolationProperty extends NodeProperty<Node> {
 		return prop.isDisabled();
 	}
 
-	public static String getAdminGroup(final Node node) {
+	public static IsolationRuntime getIsolationRuntime(final Node node) {
+		if (node == null)
+			return null;
 		final NodeIsolationProperty prop = node.getNodeProperty(NodeIsolationProperty.class);
 		if (prop == null)
 			return null;
-		return prop.getAdminGroup();
+		return prop.getIsolationRuntime();
 	}
 
 	@Extension
 	public static class DescriptorImpl extends NodePropertyDescriptor {
 		@Override
 		public String getDisplayName() {
-			return "Context Isolation Defaults";
+			return "Context Isolation Settings";
 		}
 	}
 }

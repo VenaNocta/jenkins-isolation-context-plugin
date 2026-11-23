@@ -13,37 +13,41 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jenkinsci.plugins.isolationctx.ctx.net;
+package org.jenkinsci.plugins.isolationctx.dto.net;
 
-import org.jenkinsci.plugins.isolationctx.FirewallDelegate;
+import org.jenkinsci.plugins.isolationctx.dto.FirewallDelegate;
 
+import jenkins.runeduniverse.utils.net.XStreamIp4Address;
+import jenkins.runeduniverse.utils.net.XStreamIp6Address;
 import net.runeduniverse.lib.utils.net.api.Ip4Address;
 import net.runeduniverse.lib.utils.net.api.Ip6Address;
 import net.runeduniverse.lib.utils.net.api.IpNet4Address;
 import net.runeduniverse.lib.utils.net.api.IpNet6Address;
 
-public class LnxNetLink extends DefaultNetLink {
+public class DefaultNetLink extends DefaultNetInterface implements NetLink {
 
 	private static final long serialVersionUID = 1L;
 
-	protected final String hostIfaceName;
-	protected final String contextIfaceName;
+	protected final Ip4Address contextAddr4;
+	protected final Ip6Address contextAddr6;
 
-	public LnxNetLink(final FirewallDelegate firewall, final String hostIfaceName, final String contextIfaceName, //
+	public DefaultNetLink(final FirewallDelegate firewall, //
 			final IpNet4Address subnet4, final Ip4Address hostAddr4, final Ip4Address contextAddr4, //
 			final IpNet6Address subnet6, final Ip6Address hostAddr6, final Ip6Address contextAddr6) {
-		super(firewall, //
-				subnet4, hostAddr4, contextAddr4, //
-				subnet6, hostAddr6, contextAddr6);
-		this.hostIfaceName = hostIfaceName;
-		this.contextIfaceName = contextIfaceName;
+		super(firewall, // )
+				subnet4, hostAddr4, //
+				subnet6, hostAddr6);
+		this.contextAddr4 = XStreamIp4Address.convert(contextAddr4);
+		this.contextAddr6 = XStreamIp6Address.convert(contextAddr6);
 	}
 
-	public String getHostIfaceName() {
-		return this.hostIfaceName;
+	@Override
+	public Ip4Address getContextAddressV4() {
+		return this.contextAddr4;
 	}
 
-	public String getContextIfaceName() {
-		return this.contextIfaceName;
+	@Override
+	public Ip6Address getContextAddressV6() {
+		return this.contextAddr6;
 	}
 }

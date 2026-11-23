@@ -16,9 +16,15 @@
 package org.jenkinsci.plugins.isolationctx.handler;
 
 import java.io.IOException;
-import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
 
+import org.jenkinsci.plugins.isolationctx.IsolationContext;
+import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
+import org.jenkinsci.plugins.workflow.graph.FlowNode;
+
+import hudson.model.Computer;
+import hudson.model.Run;
 import hudson.model.TaskListener;
+import hudson.remoting.VirtualChannel;
 
 public interface ComputerIsolationHandler {
 
@@ -26,9 +32,12 @@ public interface ComputerIsolationHandler {
 
 	public TaskListener logTaskListener();
 
-	public void setup(TaskListener listener) throws IOException, InterruptedException;
+	public void setup(VirtualChannel channel, TaskListener listener) throws IOException, InterruptedException;
 
-	public void shutdown(TaskListener listener) throws IOException, InterruptedException;
+	public void shutdown(VirtualChannel channel, TaskListener listener) throws IOException, InterruptedException;
+
+	public IsolationContext createIsolationContext(Run<?, ?> run, FlowNode flowNode, Computer computer,
+			TaskListener listener);
 
 	public void firewallInputOpen(TrafficMap data, TaskListener listener) throws IOException, InterruptedException;
 

@@ -19,11 +19,12 @@ import java.io.IOException;
 import java.net.UnknownHostException;
 import java.util.Set;
 
-import org.jenkinsci.plugins.isolationctx.FirewallDelegate;
+import org.jenkinsci.plugins.isolationctx.dto.FirewallDelegate;
 import org.jenkinsci.plugins.isolationctx.handler.ComputerIsolationHandler;
 
 import hudson.model.Run;
 import hudson.model.TaskListener;
+import hudson.remoting.VirtualChannel;
 import net.runeduniverse.lib.utils.net.api.IpNet4Address;
 import net.runeduniverse.lib.utils.net.api.IpNet6Address;
 
@@ -43,7 +44,7 @@ public interface ComputerIsolationState extends FirewallDelegate {
 
 	public void setIpv6Subnet(IpNet6Address subnet) throws UnknownHostException;
 
-	public void setup(TaskListener listener) throws IOException, InterruptedException;
+	public void setup(VirtualChannel channel, TaskListener listener) throws IOException, InterruptedException;
 
 	public IpNet4Address reserveIpv4Subnet(Run<?, ?> run, TaskListener listener)
 			throws IOException, InterruptedException;

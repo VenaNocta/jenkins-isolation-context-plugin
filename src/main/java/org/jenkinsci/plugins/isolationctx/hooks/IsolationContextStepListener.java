@@ -16,9 +16,10 @@
 package org.jenkinsci.plugins.isolationctx.hooks;
 
 import java.io.IOException;
-import org.jenkinsci.plugins.isolationctx.IsolationContextProvider;
-import org.jenkinsci.plugins.isolationctx.IsolationContextProvider.IsolationContextBuilder;
+
 import org.jenkinsci.plugins.isolationctx.dto.IsolationContextAction;
+import org.jenkinsci.plugins.isolationctx.provider.IsolationContextProvider;
+import org.jenkinsci.plugins.isolationctx.provider.IsolationContextProvider.IsolationContextBuilder;
 import org.jenkinsci.plugins.workflow.flow.StepListener;
 import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.steps.Step;

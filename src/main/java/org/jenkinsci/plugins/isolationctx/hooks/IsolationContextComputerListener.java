@@ -21,8 +21,10 @@ import org.jenkinsci.plugins.isolationctx.config.ComputerIsolationStateAction;
 
 import hudson.EnvVars;
 import hudson.Extension;
+import hudson.FilePath;
 import hudson.model.Computer;
 import hudson.model.TaskListener;
+import hudson.remoting.Channel;
 import hudson.slaves.ComputerListener;
 
 @Extension
@@ -32,17 +34,17 @@ public class IsolationContextComputerListener extends ComputerListener {
 	public static final String ENV_ISOLATION_SUBNET6 = "ISOLATION_SUBNET_V6";
 
 	@Override
-	public void onOnline(final Computer computer, final TaskListener listener)
-			throws IOException, InterruptedException {
-
+	public void preOnline(final Computer computer, final Channel channel, final FilePath root,
+			final TaskListener listener) throws IOException, InterruptedException {
 		final EnvVars env = computer.getEnvironment();
 
 		try {
-			final ComputerIsolationStateAction computerState = ComputerIsolationStateAction.get(computer);
+			final ComputerIsolationStateAction computerState = ComputerIsolationStateAction.init(computer, root);
 			if (computerState == null)
 				return;
+			ComputerIsolationStateAction.injectHandler(computerState, computer, channel, root);
 
-			computerState.setup(listener);
+			computerState.setup(channel, listener);
 
 			String subnet = StringUtils.trimToNull(env.get(ENV_ISOLATION_SUBNET4));
 			if (subnet != null) {

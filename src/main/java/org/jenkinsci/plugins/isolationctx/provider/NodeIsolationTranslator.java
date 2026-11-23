@@ -13,13 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jenkinsci.plugins.isolationctx;
+package org.jenkinsci.plugins.isolationctx.provider;
 
 import java.io.IOException;
 import java.io.Serializable;
 
+import org.jenkinsci.plugins.isolationctx.IsolationContext;
 import org.jenkinsci.plugins.isolationctx.config.NodeIsolationProperty;
 import org.jenkinsci.plugins.isolationctx.dto.IsolationContextAction;
+import org.jenkinsci.plugins.isolationctx.utils.WorkflowUtil;
 import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.steps.BodyInvoker;
 import org.jenkinsci.plugins.workflow.steps.DynamicContext;
@@ -33,7 +35,7 @@ import hudson.model.Node;
 import hudson.model.Run;
 
 @Extension
-public class DynamicIsolationCtxLauncherDecorator extends DynamicContext.Typed<LauncherDecorator> {
+public class NodeIsolationTranslator extends DynamicContext.Typed<LauncherDecorator> {
 
 	public static final String ERR_REQUIRED_ISOLATION = "Node requires Sandbox-Isolation to be active! - No Sandbox-Isolation available!";
 
@@ -49,14 +51,11 @@ public class DynamicIsolationCtxLauncherDecorator extends DynamicContext.Typed<L
 		final FlowNode flowNode = context.get(FlowNode.class);
 		// define fallback result
 		LauncherDecorator fallbackResult = null;
-		if (node != null) {
-			final NodeIsolationProperty isoProp = node.getNodeProperty(NodeIsolationProperty.class);
-			if (isoProp != null && !isoProp.isDisabled()) {
-				fallbackResult = new AbortingLauncherDecorator(ERR_REQUIRED_ISOLATION);
-			}
+		if (NodeIsolationProperty.isDisabled(node)) {
+			fallbackResult = new AbortingLauncherDecorator(ERR_REQUIRED_ISOLATION);
 		}
 		// apply overrides if available
-		final IsolationContextAction action = WorkflowUtils.findContextAction(IsolationContextAction.class, run,
+		final IsolationContextAction action = WorkflowUtil.findContextAction(IsolationContextAction.class, run,
 				flowNode);
 		if (action == null)
 			return fallbackResult;

@@ -15,6 +15,10 @@
  */
 package org.jenkinsci.plugins.isolationctx.dto;
 
+import static org.jenkinsci.plugins.isolationctx.utils.LauncherUtil.outputToLong;
+import static org.jenkinsci.plugins.isolationctx.utils.LauncherUtil.outputToString;
+import static org.jenkinsci.plugins.isolationctx.utils.LauncherUtil.toLong;
+
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.Arrays;
@@ -24,13 +28,10 @@ import java.util.Iterator;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletionException;
-import org.jenkinsci.plugins.isolationctx.util.WorkspaceLauncherUtil;
 
-import static org.jenkinsci.plugins.isolationctx.util.WorkspaceLauncherUtil.outputToString;
-import static org.jenkinsci.plugins.isolationctx.util.WorkspaceLauncherUtil.outputToLong;
-import static org.jenkinsci.plugins.isolationctx.util.WorkspaceLauncherUtil.toLong;
+import org.jenkinsci.plugins.isolationctx.utils.LauncherUtil;
 
-public class LinuxIdentity implements Serializable {
+public class LnxIdentity implements Serializable {
 
 	private static final long serialVersionUID = 1L;
 
@@ -56,28 +57,28 @@ public class LinuxIdentity implements Serializable {
 		}
 	}
 
-	public LinuxIdentity setUserId(final long user) {
+	public LnxIdentity setUserId(final long user) {
 		synchronized (this) {
 			this.userId = user;
 			return this;
 		}
 	}
 
-	public LinuxIdentity setGroupId(final long group) {
+	public LnxIdentity setGroupId(final long group) {
 		synchronized (this) {
 			this.groupId = group;
 			return this;
 		}
 	}
 
-	public LinuxIdentity setGroupIds(final Collection<Long> groups) {
+	public LnxIdentity setGroupIds(final Collection<Long> groups) {
 		synchronized (this) {
 			this.groupIds.clear();
 			return addGroupIds(groups);
 		}
 	}
 
-	public LinuxIdentity addGroupIds(final Long... groups) {
+	public LnxIdentity addGroupIds(final Long... groups) {
 		synchronized (this) {
 			if (groups == null || groups.length == 0)
 				return this;
@@ -85,7 +86,7 @@ public class LinuxIdentity implements Serializable {
 		}
 	}
 
-	public LinuxIdentity addGroupIds(final Collection<Long> groups) {
+	public LnxIdentity addGroupIds(final Collection<Long> groups) {
 		synchronized (this) {
 			if (groups == null || groups.isEmpty())
 				return this;
@@ -96,7 +97,7 @@ public class LinuxIdentity implements Serializable {
 		}
 	}
 
-	public LinuxIdentity removeGroupIds(final Long... groups) {
+	public LnxIdentity removeGroupIds(final Long... groups) {
 		synchronized (this) {
 			if (groups == null || groups.length == 0)
 				return this;
@@ -104,7 +105,7 @@ public class LinuxIdentity implements Serializable {
 		}
 	}
 
-	public LinuxIdentity removeGroupIds(final Collection<Long> groups) {
+	public LnxIdentity removeGroupIds(final Collection<Long> groups) {
 		synchronized (this) {
 			if (groups == null || groups.isEmpty())
 				return this;
@@ -129,9 +130,9 @@ public class LinuxIdentity implements Serializable {
 		}
 	}
 
-	public LinuxIdentity copy() {
+	public LnxIdentity copy() {
 		synchronized (this) {
-			final LinuxIdentity identity = new LinuxIdentity();
+			final LnxIdentity identity = new LnxIdentity();
 			identity.setUserId(this.userId);
 			identity.setGroupId(this.groupId);
 			identity.setGroupIds(this.groupIds);
@@ -139,8 +140,19 @@ public class LinuxIdentity implements Serializable {
 		}
 	}
 
-	public static LinuxIdentity identify(final WorkspaceLauncherUtil launcherUtil) throws CompletionException {
-		final LinuxIdentity id = new LinuxIdentity();
+	public <T extends LnxIdentity> T copyTo(final T identity) {
+		if (identity == null)
+			return null;
+		synchronized (this) {
+			identity.setUserId(this.userId);
+			identity.setGroupId(this.groupId);
+			identity.setGroupIds(this.groupIds);
+			return identity;
+		}
+	}
+
+	public static LnxIdentity identify(final LauncherUtil launcherUtil) throws CompletionException {
+		final LnxIdentity id = new LnxIdentity();
 		try {
 			// get user
 			id.setUserId(outputToLong(launcherUtil.wsExecAndJoinCmd(Arrays.asList("id", "-r", "--user"), true), 10));
@@ -158,7 +170,7 @@ public class LinuxIdentity implements Serializable {
 		return id;
 	}
 
-	public static long groupIdByName(final WorkspaceLauncherUtil launcherUtil, final String groupName)
+	public static long groupIdByName(final LauncherUtil launcherUtil, final String groupName)
 			throws CompletionException {
 		if (groupName == null || groupName.length() == 0)
 			return -1;

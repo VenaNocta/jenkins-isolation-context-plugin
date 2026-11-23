@@ -13,16 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jenkinsci.plugins.isolationctx.ctx;
+package org.jenkinsci.plugins.isolationctx.dto;
 
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import org.jenkinsci.plugins.isolationctx.FirewallDelegate;
-import org.jenkinsci.plugins.isolationctx.dto.TrafficMap;
 
 import hudson.model.TaskListener;
 import jenkins.runeduniverse.utils.net.IpNetworkUtils;
